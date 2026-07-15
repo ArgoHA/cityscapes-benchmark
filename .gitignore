@@ -1,0 +1,20 @@
+# macOS
+.DS_Store
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+
+# Data / models / outputs
+*.pt
+*.pth
+*.engine
+*.onnx
+runs/
+weights/
+datasets/
+outputs/

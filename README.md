@@ -1,3 +1,5 @@
+
+
 # Cityscapes: D-FINE-seg vs YOLO26 vs RF-DETR
 
 A like-for-like benchmark of three detection/segmentation frameworks on Cityscapes, across three
@@ -29,11 +31,11 @@ tasks: **detection**, **instance segmentation**, and **semantic segmentation**.
 ## Quick start
 
 ```bash
-python prep_datasets.py                          # dataset layouts (symlinks, original resolution)
-./run_yolo_training.sh                           # train YOLO26
-./run_rfdetr_training.sh                         # train RF-DETR
-python bench_all.py --models dfine yolo rfdetr   # bench: accuracy + latency at the same operating point
-python make_results.py                           # regenerate RESULTS.md / RESULTS.csv
+python prep_datasets.py                                                  # dataset layouts (symlinks, original resolution)
+./run_yolo_training.sh                                                   # train YOLO26
+./run_rfdetr_training.sh                                                 # train RF-DETR
+uv run --project ../D-FINE-seg python bench_all.py --models dfine yolo rfdetr   # bench: accuracy + latency at the same operating point
+uv run --project ../D-FINE-seg python make_results.py                    # regenerate RESULTS.md / RESULTS.csv
 ```
 
 Requires three isolated venvs (one per framework), each pinned to **TensorRT 10.13.3.9** so all

@@ -21,22 +21,21 @@ come out of one idle-GPU run and nothing is transcribed by hand.
 Each framework runs its OWN shipped inference in its OWN venv; a single scorer (D-FINE's Validator,
 original-resolution GT) scores all of them. Run on an IDLE GPU.
 
-  uv run --project /home/argo/Desktop/Projects/D-FINE-seg python bench_all.py [--models dfine yolo]
+  uv run --project "$DFINE_SEG_ROOT" python bench_all.py [--models dfine yolo]
 """
 
 import argparse
 import json
-import pickle
 import subprocess
-import sys
 from pathlib import Path
 
 import pandas as pd
 from tabulate import tabulate
 
-R = Path("/home/argo/Desktop/Projects/cityscapes")
-DFINE = Path("/home/argo/Desktop/Projects/D-FINE-seg")
-RIV = R / "cityscapes-benchmark"
+from paths import RIV, dfine_root
+from paths import ROOT as R
+
+DFINE = dfine_root()
 C = R / "output" / "compare"
 M = R / "output" / "models"
 DFINE_PY = ["uv", "run", "--project", str(DFINE), "python"]
@@ -59,11 +58,15 @@ CFG = {t: M / v[0][0] / "config.yaml" for t, v in DF.items()}  # GT source (same
 #              nbs=64 accumulation. Bench both and report YOLO's BETTER run; never report a rival's
 #              weaker config just because we prefer its training knob.
 YOLO = {
-    "detect": [("detect", "m", "yolo26m_detect_bs5", "YOLO26-m"),
-               ("detect", "m", "yolo26m_detect", "YOLO26-m-bs10")],
+    "detect": [
+        ("detect", "m", "yolo26m_detect_bs5", "YOLO26-m"),
+        ("detect", "m", "yolo26m_detect", "YOLO26-m-bs10"),
+    ],
     "segment": [("segment", "m", "yolo26m_segment", "YOLO26-m")],
-    "sem_seg": [("semantic", "l", "yolo26l_semantic", "YOLO26-l"),
-                ("semantic", "m", "yolo26m_semantic", "YOLO26-m")],
+    "sem_seg": [
+        ("semantic", "l", "yolo26l_semantic", "YOLO26-l"),
+        ("semantic", "m", "yolo26m_semantic", "YOLO26-m"),
+    ],
 }
 RFDETR = {"detect": [("medium", "rfdetr_medium")], "segment": [("seg-medium", "rfdetr_seg_medium")]}
 
@@ -74,17 +77,31 @@ def runs_for(task: str, models: list[str]) -> list[dict]:
     for m in models:
         if m == "dfine":
             for run, name in DF.get(task, []):
-                out.append({"kind": "dfine", "name": name, "slug": run,
-                            "engine": M / run / "model.engine"})
+                out.append(
+                    {"kind": "dfine", "name": name, "slug": run, "engine": M / run / "model.engine"}
+                )
         elif m == "yolo":
             for ytask, size, run, name in YOLO.get(task, []):
-                out.append({"kind": "yolo", "name": name, "slug": run, "spec": (ytask, run),
-                            "engine": M / run / "weights" / "best.engine"})
+                out.append(
+                    {
+                        "kind": "yolo",
+                        "name": name,
+                        "slug": run,
+                        "spec": (ytask, run),
+                        "engine": M / run / "weights" / "best.engine",
+                    }
+                )
         elif m == "rfdetr":
             for variant, run in RFDETR.get(task, []):
-                out.append({"kind": "rfdetr", "name": f"RF-DETR-{variant}",
-                            "slug": f"rfdetr_{variant.replace('-', '_')}", "spec": (variant, run),
-                            "engine": None})  # rfdetr builds its engine inside the dump dir
+                out.append(
+                    {
+                        "kind": "rfdetr",
+                        "name": f"RF-DETR-{variant}",
+                        "slug": f"rfdetr_{variant.replace('-', '_')}",
+                        "spec": (variant, run),
+                        "engine": None,
+                    }
+                )  # rfdetr builds its engine inside the dump dir
     return out
 
 
@@ -105,26 +122,81 @@ def sh(cmd):
 
 def infer(run: dict, task: str, conf: float, out: Path):
     if run["kind"] == "dfine":
-        sh(DFINE_PY + ["infer_dfine.py", "--engine", run["engine"], "--task", task,
-                       "--name", run["name"], "--conf", conf, "--out", out])
+        sh(
+            DFINE_PY
+            + [
+                "infer_dfine.py",
+                "--engine",
+                run["engine"],
+                "--task",
+                task,
+                "--name",
+                run["name"],
+                "--conf",
+                conf,
+                "--out",
+                out,
+            ]
+        )
     elif run["kind"] == "yolo":
         ytask, sub = run["spec"]
-        sh([RIV / ".venv-yolo/bin/python", "infer_yolo.py",
-            "--weights", M / sub / "weights" / "best.pt",
-            "--task", ytask, "--name", run["name"], "--conf", conf, "--out", out])
+        sh(
+            [
+                RIV / ".venv-yolo/bin/python",
+                "infer_yolo.py",
+                "--weights",
+                M / sub / "weights" / "best.pt",
+                "--task",
+                ytask,
+                "--name",
+                run["name"],
+                "--conf",
+                conf,
+                "--out",
+                out,
+            ]
+        )
     elif run["kind"] == "rfdetr":
         variant, sub = run["spec"]
-        sh([RIV / ".venv-rfdetr/bin/python", "infer_rfdetr.py", "--variant", variant,
-            "--weights", M / sub / "checkpoint_best_ema.pth",
-            "--name", run["name"], "--conf", conf, "--out", out])
+        sh(
+            [
+                RIV / ".venv-rfdetr/bin/python",
+                "infer_rfdetr.py",
+                "--variant",
+                variant,
+                "--weights",
+                M / sub / "checkpoint_best_ema.pth",
+                "--name",
+                run["name"],
+                "--conf",
+                conf,
+                "--out",
+                out,
+            ]
+        )
 
 
 def score(task: str, preds: list[Path], sweep: bool, conf: float, out_csv: Path):
-    cmd = DFINE_PY + ["score.py", "--task", task, "--cfg", CFG[task],
-                      "--sweep", 1 if sweep else 0, "--conf", conf, "--out", out_csv,
-                      "--preds"] + list(preds)
-    if task == "sem_seg":  # that run's frozen config predates the data/dataset/ reorg
-        cmd += ["--data-path", R / "data" / "dataset"]
+    cmd = (
+        DFINE_PY
+        + [
+            "score.py",
+            "--task",
+            task,
+            "--cfg",
+            CFG[task],
+            "--sweep",
+            1 if sweep else 0,
+            "--conf",
+            conf,
+            "--out",
+            out_csv,
+            "--preds",
+        ]
+        + list(preds)
+    )
+    if task == "sem_seg":  # frozen config predates reorg; sem_seg GT now lives in data/dataset_sem
+        cmd += ["--data-path", R / "data" / "dataset_sem"]
     sh(cmd)
     return pd.read_csv(out_csv, index_col=0)
 
@@ -138,8 +210,10 @@ def engine_latency(runs: list[dict], task: str) -> tuple[dict, dict]:
     eng = {r["name"]: resolve_engine(r, task) for r in runs}
     sh(DFINE_PY + ["measure_engine.py", "--csv", csv] + list(eng.values()))
     df = pd.read_csv(csv, index_col=0)
-    return ({n: float(df.loc[str(p), "engine_ms"]) for n, p in eng.items()},
-            {n: str(df.loc[str(p), "input"]) for n, p in eng.items()})
+    return (
+        {n: float(df.loc[str(p), "engine_ms"]) for n, p in eng.items()},
+        {n: str(df.loc[str(p), "input"]) for n, p in eng.items()},
+    )
 
 
 if __name__ == "__main__":
@@ -152,7 +226,7 @@ if __name__ == "__main__":
     final = {}
     for task in args.tasks:
         runs = runs_for(task, args.models)
-        print(f"\n{'='*70}\n{task}: {[r['name'] for r in runs]}\n{'='*70}")
+        print(f"\n{'=' * 70}\n{task}: {[r['name'] for r in runs]}\n{'=' * 70}")
 
         if task == "sem_seg":
             # no confidence threshold (dense argmax) -> one pass, latency + mIoU together
@@ -193,9 +267,15 @@ if __name__ == "__main__":
         df.to_csv(C / f"{task}_final.csv")
         final[task] = df
 
-    print(f"\n\n{'#'*70}\n#  FINAL — accuracy and latency at each model's own optimal conf\n{'#'*70}")
+    print(
+        f"\n\n{'#' * 70}\n#  FINAL — accuracy and latency at each model's own optimal conf\n{'#' * 70}"
+    )
     for task, df in final.items():
         print(f"\n=== {task} ===")
         print(tabulate(df.round(3), headers="keys", tablefmt="github", showindex=True))
-    json.dump({k: v.to_dict() for k, v in final.items()},
-              open(C / "final_all.json", "w"), indent=2, default=str)
+    json.dump(
+        {k: v.to_dict() for k, v in final.items()},
+        open(C / "final_all.json", "w"),
+        indent=2,
+        default=str,
+    )

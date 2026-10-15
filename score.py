@@ -5,7 +5,7 @@ D-FINE's BenchLoader exactly as src/dl/bench.py does (boxes rescaled to original
 instance masks rasterized from original-resolution polygons, sem_seg compared at original
 resolution), so the numbers are directly comparable to the existing bench_metrics.csv.
 
-  uv run --project /home/argo/Desktop/Projects/D-FINE-seg python score.py \
+  uv run --project "$DFINE_SEG_ROOT" python score.py \
       --task detect --cfg <model_dir>/config.yaml \
       --preds <compare>/dfine_s_det <compare>/yolo26s_det <compare>/rfdetr_s_det
 
@@ -25,12 +25,14 @@ from omegaconf import OmegaConf
 from tabulate import tabulate
 from tqdm import tqdm
 
-DFINE = Path("/home/argo/Desktop/Projects/D-FINE-seg")
+from paths import OUTPUT, dfine_root
+
+DFINE = dfine_root()
 sys.path.insert(0, str(DFINE))
 
-from src.dl.bench import BenchLoader  # noqa: E402
-from src.dl.utils import encode_sample_masks_to_rle, poly_abs_to_mask, process_boxes  # noqa: E402
-from src.dl.validator import SemSegValidator, Validator  # noqa: E402
+from dfine_seg.dl.bench import BenchLoader  # noqa: E402
+from dfine_seg.dl.utils import encode_sample_masks_to_rle, poly_abs_to_mask, process_boxes  # noqa: E402
+from dfine_seg.dl.validator import SemSegValidator, Validator  # noqa: E402
 
 IOU_THRESH = 0.5
 
@@ -124,11 +126,16 @@ def _metrics_at(all_gt, all_preds, label_to_name, conf, boxes_only=False):
     The FINAL reported metrics are still full mask-based, computed at the chosen t*."""
     preds = _filter(all_preds, conf)
     if boxes_only:
-        preds = [{k: v for k, v in p.items() if k not in ("masks_rle", "masks_size")}
-                 for p in preds]
+        preds = [
+            {k: v for k, v in p.items() if k not in ("masks_rle", "masks_size")} for p in preds
+        ]
     v = Validator(
-        all_gt, preds, conf_thresh=conf, iou_thresh=IOU_THRESH,
-        label_to_name=label_to_name, compute_maps=False,
+        all_gt,
+        preds,
+        conf_thresh=conf,
+        iou_thresh=IOU_THRESH,
+        label_to_name=label_to_name,
+        compute_maps=False,
     )
     return v.compute_metrics(extended=False, ignore_masks=boxes_only)
 
@@ -175,26 +182,56 @@ def score_sem(blob, cfg, preds_dir):
         stem = Path(rec["file"]).stem
         pred = cv2.imread(str(preds_dir / "sem_seg" / f"{stem}.png"), cv2.IMREAD_GRAYSCALE)
         gt = cv2.imread(str(data_path / "labels" / f"{stem}.png"), cv2.IMREAD_GRAYSCALE)
+        if pred is None or pred.shape != gt.shape:
+            raise ValueError(f"{stem}: prediction {getattr(pred, 'shape', None)} vs GT {gt.shape}")
         v.update(torch.from_numpy(pred), torch.from_numpy(gt))
-    return v.compute_metrics()
+    m = v.compute_metrics(extended=True)
+    m.update(m.pop("extended_metrics"))  # per-class IoU columns (iou_<class>)
+    m["n_images"] = len(blob["preds"])  # < 500 means a --limit smoke run, not a result
+    return m
 
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--task", required=True, choices=["detect", "segment", "sem_seg"])
-    ap.add_argument("--cfg", required=True, help="a D-FINE config.yaml for this task (GT source)")
+    ap.add_argument(
+        "--cfg",
+        default=None,
+        help="a D-FINE config.yaml for this task (GT source); optional for sem_seg",
+    )
     ap.add_argument("--preds", nargs="+", required=True, help="dirs containing preds.pkl")
     ap.add_argument("--conf", type=float, default=0.5)
-    ap.add_argument("--sweep", type=int, default=1, help="also report F1 at each model's own optimum")
-    ap.add_argument("--latency-from", nargs="*", default=[],
-                    help="dirs holding the conf=0.5 latency pass (accuracy dumps use a low conf)")
+    ap.add_argument(
+        "--sweep", type=int, default=1, help="also report F1 at each model's own optimum"
+    )
+    ap.add_argument(
+        "--latency-from",
+        nargs="*",
+        default=[],
+        help="dirs holding the conf=0.5 latency pass (accuracy dumps use a low conf)",
+    )
     ap.add_argument("--out", default=None)
     # the sem_seg run's frozen config points at data/, but the dataset was later reorganised into
     # data/dataset/ (when dataset_det / dataset_seg were split out). Override rather than guess.
     ap.add_argument("--data-path", default=None)
     args = ap.parse_args()
 
-    cfg = OmegaConf.load(args.cfg)
+    if args.cfg:
+        cfg = OmegaConf.load(args.cfg)
+    elif args.task == "sem_seg":  # no D-FINE run needed: the 19 trainIds, ignore 255
+        from prep_datasets import DATA, SEM_CLASSES
+
+        cfg = OmegaConf.create(
+            {
+                "train": {
+                    "data_path": str(DATA / "dataset_sem"),
+                    "label_to_name": SEM_CLASSES,
+                    "sem_seg": {"ignore_index": 255},
+                }
+            }
+        )
+    else:
+        sys.exit("--cfg is required for detect/segment")
     if args.data_path:
         cfg.train.data_path = args.data_path
     dp = Path(str(cfg.train.data_path))
@@ -222,8 +259,8 @@ if __name__ == "__main__":
         m["latency"] = round(lat.get(blob["model"], blob["latency_ms"]), 2)
         rows[blob["model"]] = m
 
-    df = pd.DataFrame.from_dict(rows, orient="index").round(3)
-    out = args.out or f"/home/argo/Desktop/Projects/cityscapes/output/compare/{args.task}.csv"
+    df = pd.DataFrame.from_dict(rows, orient="index").round(4 if args.task == "sem_seg" else 3)
+    out = args.out or OUTPUT / "compare" / f"{args.task}.csv"
     Path(out).parent.mkdir(parents=True, exist_ok=True)
     df.to_csv(out)
     print(f"\n=== {args.task} (conf={args.conf}, iou={IOU_THRESH}) ===")

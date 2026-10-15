@@ -1,10 +1,10 @@
 """Run D-FINE-seg through ITS OWN shipped TensorRT inference and dump predictions.
 
-Uses src/infer/trt_model.py::TRT_model - the wrapper D-FINE ships and that `make bench` uses -
+Uses dfine_seg/infer/trt_model.py::TRTModel - the wrapper D-FINE ships and that `make bench` uses -
 so D-FINE goes through the same dump/timing path as the rivals and every model is scored by the
 same code from the same artifacts.
 
-  uv run --project /home/argo/Desktop/Projects/D-FINE-seg python infer_dfine.py \
+  uv run --project "$DFINE_SEG_ROOT" python infer_dfine.py \
       --engine <model_dir>/model.engine --task detect --name dfine_s_det
 """
 
@@ -14,18 +14,30 @@ from pathlib import Path
 
 import cv2
 import numpy as np
+import torch
 
-DFINE = Path("/home/argo/Desktop/Projects/D-FINE-seg")
-ROOT = Path("/home/argo/Desktop/Projects/cityscapes")
-sys.path.insert(0, str(DFINE))
-sys.path.insert(0, str(ROOT / "cityscapes-benchmark"))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from paths import ROOT, dfine_root  # noqa: E402
 
-from src.infer.trt_model import TRT_model  # noqa: E402
+sys.path.insert(0, str(dfine_root()))
+
+from dfine_seg.infer.trt_model import TRTModel  # noqa: E402
 
 import dump  # noqa: E402
 
 VAL_CSV = ROOT / "data" / "dataset" / "val.csv"
 IMAGES = ROOT / "data" / "dataset" / "images"
+
+
+def stats_from_pt(pt: Path, hw: tuple[int, int]) -> dict:
+    """Params/GMACs of the torch model the engine was exported from (same counter as the rivals)."""
+    from dfine_seg.infer.torch_model import TorchModel
+
+    from model_stats import model_stats
+
+    tm = TorchModel(model_path=str(pt), input_height=hw[0], input_width=hw[1], device="cuda")
+    return model_stats(tm.model.eval(), torch.zeros(1, 3, *hw, device="cuda"))
+
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
@@ -35,12 +47,11 @@ if __name__ == "__main__":
     ap.add_argument("--conf", type=float, default=0.5)
     ap.add_argument("--out", default=None)
     ap.add_argument("--limit", type=int, default=0, help="latency-calibration: first N images only")
+    ap.add_argument("--weights", default=None, help="model.pt the engine came from (params/GMACs)")
     args = ap.parse_args()
 
-    n_out = 19 if args.task == "sem_seg" else 8
-    model = TRT_model(
+    model = TRTModel(
         model_path=args.engine,
-        n_outputs=n_out,
         conf_thresh=args.conf,
         rect=False,
         keep_ratio=False,
@@ -62,10 +73,16 @@ if __name__ == "__main__":
             out["masks"] = r["masks"].cpu().numpy().astype(np.uint8)
         return out
 
-    stems = [ln.strip() for ln in VAL_CSV.read_text().splitlines() if ln.strip()]
-    images = [IMAGES / s for s in stems]
-    if args.limit:
-        images = images[: args.limit]
+    if args.task == "sem_seg":
+        images = dump.sem_val_images(args.limit)
+    else:
+        stems = [ln.strip() for ln in VAL_CSV.read_text().splitlines() if ln.strip()]
+        images = [IMAGES / s for s in stems][: args.limit or None]
+
+    h, w = model.input_size
+    extra = {"engine": args.engine, "conf": args.conf, "input": f"{h}x{w}", "backend": "trt"}
+    if args.weights:
+        extra.update(stats_from_pt(Path(args.weights), (h, w)))
 
     dump.run(
         args.name,
@@ -75,5 +92,5 @@ if __name__ == "__main__":
         images,
         lambda p: cv2.imread(str(p), cv2.IMREAD_COLOR),
         Path(args.out or ROOT / "output" / "compare" / args.name),
-        extra={"engine": args.engine, "conf": args.conf},
+        extra=extra,
     )

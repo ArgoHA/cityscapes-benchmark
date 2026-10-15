@@ -1,0 +1,183 @@
+# D-FINE-seg m, Cityscapes sem_seg at native 1024x2048. Saved by D-FINE-seg as output/models/native_m_2026-10-15/config.yaml;
+# only train.root was changed, and the Hydra service block from D-FINE-seg's root config.yaml was
+# appended (saved run configs drop it). See README.md here for how to use it.
+project_name: cityscapes
+exp_name: native_m
+exp: ${exp_name}_${now_dir}
+model_name: m
+task: sem_seg
+train:
+  root: /path/to/cityscapes # <- your workspace: data/dataset_sem lives under it
+  pretrained_dataset: obj2coco
+  pretrained_model_path: pretrained/dfine_${model_name}_${train.pretrained_dataset}.pt
+  imagenet_backbone: false
+  coco_dataset: false
+  data_path: ${train.root}/data/dataset_sem
+  path_to_test_data: ${train.root}/data/test
+  path_to_save: ${train.root}/output/models/${exp}
+  debug_img_path: ${train.root}/output/debug_images
+  eval_preds_path: ${train.root}/output/eval_preds
+  bench_img_path: ${train.root}/output/bench_imgs
+  infer_path: ${train.root}/output/infer
+  use_wandb: true
+  device: cuda
+  label_to_name:
+    0: road
+    1: sidewalk
+    2: building
+    3: wall
+    4: fence
+    5: pole
+    6: traffic-light
+    7: traffic-sign
+    8: vegetation
+    9: terrain
+    10: sky
+    11: person
+    12: rider
+    13: car
+    14: truck
+    15: bus
+    16: train
+    17: motorcycle
+    18: bicycle
+  use_one_class: false
+  rare_class_sampling: false
+  kd:
+    teacher: null
+    img_size: null
+    teacher_batch: null
+    cls_weight: 1.0
+    loc_weight: 1.5
+    mask_weight: 1.0
+    sem_seg_weight: 3.0
+    sem_seg_tau: 4.0
+  sem_seg:
+    ignore_index: 255
+    class_weights: null
+  ddp:
+    enabled: false
+    n_gpus: 2
+  decision_metrics:
+  - f1
+  - mAP_50
+  - iou
+  img_size:
+  - 1024
+  - 2048
+  in_channels: 3
+  keep_ratio: false
+  to_visualize_eval: true
+  debug_img_processing: true
+  amp_enabled: true
+  amp_dtype: bfloat16
+  clip_max_norm: 0.1
+  batch_size: 3
+  b_accum_steps: 1
+  epochs: 70
+  max_walltime_min: null
+  early_stopping: 0
+  ignore_background_epochs: 0
+  num_workers: 12
+  mask_batch_size: 150
+  freeze_except_mask: false
+  conf_thresh: 0.5
+  iou_thresh: 0.5
+  use_ema: true
+  ema_momentum: 0.9998
+  use_scheduler: true
+  use_muon: true
+  aux_optimizer: adan
+  adan_lr_mult: 5.0
+  adan_betas:
+  - 0.98
+  - 0.92
+  - 0.99
+  base_lr: ${train.lrs.${model_name}.base_lr}
+  backbone_lr: ${train.lrs.${model_name}.backbone_lr}
+  cycler_pct_start: 0.1
+  weight_decay: 0.000125
+  betas:
+  - 0.9
+  - 0.999
+  label_smoothing: 0.0
+  mosaic_augs:
+    mosaic_prob: null
+    no_mosaic_epochs: 5
+    mosaic_scale:
+    - 0.5
+    - 1.5
+    degrees: 0.0
+    translate: 0.2
+    shear: 2.0
+  augs:
+    rotation_degree: 10
+    rotation_p: 0.05
+    multiscale_prob: 0.0
+    scale_jitter: null
+    rotate_90: 0.0
+    left_right_flip: 0.3
+    up_down_flip: 0.0
+    to_gray: 0.01
+    blur: 0.01
+    gamma: 0.02
+    brightness: 0.02
+    noise: 0.01
+    coarse_dropout: 0.0
+  seed: 42
+  cudnn_fixed: false
+  lrs:
+    'n':
+      backbone_lr: 0.0004
+      base_lr: 0.0008
+    s:
+      backbone_lr: 6.0e-05
+      base_lr: 0.00025
+    m:
+      backbone_lr: 2.0e-05
+      base_lr: 0.00015
+    l:
+      backbone_lr: 1.0e-05
+      base_lr: 0.00016
+    x:
+      backbone_lr: 2.0e-06
+      base_lr: 0.0002
+split:
+  ignore_negatives: false
+  shuffle: true
+  train_split: 0.85
+  val_split: 0.15
+export:
+  from_pretrained: false
+  half: true
+  max_batch_size: 1
+  dynamic_input: false
+  formats:
+  - tensorrt
+  parity: true
+  ov_int8_max_drop: 0.02
+  trt_int8_workspace_gb: 4
+  trt_int8_validate: true
+bench:
+  formats:
+  - torch
+  - tensorrt
+infer:
+  to_crop: true
+  to_track: true
+  paddings:
+    w: 0.05
+    h: 0.05
+
+### service (from D-FINE-seg root config.yaml) ###
+defaults:
+  - _self_
+  - override hydra/hydra_logging: disabled
+  - override hydra/job_logging: disabled
+
+hydra:
+  output_subdir: null
+  run:
+    dir: .
+
+now_dir: &nowdir ${now:%Y-%m-%d}

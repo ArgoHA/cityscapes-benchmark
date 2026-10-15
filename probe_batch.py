@@ -14,16 +14,19 @@ So: run a few REAL training iterations at each candidate batch and record peak a
 import argparse
 import gc
 import warnings
-from pathlib import Path
 
 warnings.filterwarnings("ignore")
 
 import torch  # noqa: E402
 from ultralytics import YOLO  # noqa: E402
 
-DATA = Path("/home/argo/Desktop/Projects/cityscapes/data")
-TASKS = {"detect": ("", "yolo_det.yaml"), "segment": ("-seg", "yolo_seg.yaml"),
-         "semantic": ("-sem", "yolo_sem.yaml")}
+from paths import DATA  # noqa: E402
+
+TASKS = {
+    "detect": ("", "yolo_det.yaml"),
+    "segment": ("-seg", "yolo_seg.yaml"),
+    "semantic": ("-sem", "yolo_sem.yaml"),
+}
 TOTAL_GB = torch.cuda.get_device_properties(0).total_memory / 1e9
 
 
@@ -34,9 +37,19 @@ def probe(task, size, batch, iters=12) -> float | None:
     torch.cuda.reset_peak_memory_stats()
     try:
         YOLO(f"yolo26{size}{suffix}.pt").train(
-            data=str(DATA / yaml), epochs=1, imgsz=640, batch=batch, device=0,
-            workers=4, val=False, save=False, plots=False, verbose=False,
-            project="/tmp/probe", name=f"{task}_{size}_b{batch}", exist_ok=True,
+            data=str(DATA / yaml),
+            epochs=1,
+            imgsz=640,
+            batch=batch,
+            device=0,
+            workers=4,
+            val=False,
+            save=False,
+            plots=False,
+            verbose=False,
+            project="/tmp/probe",
+            name=f"{task}_{size}_b{batch}",
+            exist_ok=True,
             fraction=iters * batch / 2975,  # just enough images for `iters` steps
         )
         return torch.cuda.max_memory_allocated() / 1e9
@@ -59,7 +72,9 @@ if __name__ == "__main__":
     ap.add_argument("--target", type=float, default=0.70, help="fraction of VRAM to aim for")
     args = ap.parse_args()
 
-    print(f"\nGPU total {TOTAL_GB:.1f} GB | target {args.target:.0%} = {TOTAL_GB*args.target:.1f} GB")
+    print(
+        f"\nGPU total {TOTAL_GB:.1f} GB | target {args.target:.0%} = {TOTAL_GB * args.target:.1f} GB"
+    )
     ok = []
     for b in args.batches:
         peak = probe(args.task, args.size, b)
@@ -68,7 +83,9 @@ if __name__ == "__main__":
             break
         frac = peak / TOTAL_GB
         fits = frac <= args.target
-        print(f"  batch {b:3d}  peak {peak:5.2f} GB  ({frac:4.0%}) {'ok' if fits else 'OVER target'}")
+        print(
+            f"  batch {b:3d}  peak {peak:5.2f} GB  ({frac:4.0%}) {'ok' if fits else 'OVER target'}"
+        )
         if fits:
             ok.append(b)
 

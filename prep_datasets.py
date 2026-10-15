@@ -6,9 +6,14 @@ We are comparing architecture + framework end-to-end, so no geometry is normaliz
 Images are symlinked - nothing is re-encoded or resized on disk.
 
 Sources (read-only):
-  data/dataset_det   images/ + labels/*.txt (bbox)      + train.csv/val.csv
+  data/dataset       images/ + labels/*.txt (bbox)      + train.csv/val.csv   (detection; owns the images)
   data/dataset_seg   images/ + labels/*.txt (polygons)  + train.csv/val.csv
-  data/dataset       images/ + labels/*.png (trainIds)  + train.csv/val.csv
+  data/dataset_sem   images/ + labels/*.png (trainIds)  + train.csv/val.csv
+
+data/dataset_sem (D-FINE-seg's sem_seg layout; the native sem_seg benchmark needs only this and
+yolo_sem) is built from the official Cityscapes zips:
+  python prep_datasets.py --only dataset_sem yolo_sem --raw /path/to/cityscapes_raw
+where cityscapes_raw holds the unzipped leftImg8bit_trainvaltest.zip and gtFine_trainvaltest.zip.
 
 Outputs (under data/):
   yolo_det/{images,labels}/{train,val}      + yolo_det.yaml     (ultralytics detect)
@@ -24,18 +29,61 @@ from pathlib import Path
 
 import yaml
 
-ROOT = Path("/home/argo/Desktop/Projects/cityscapes")
-DATA = ROOT / "data"
+from paths import DATA
 
 THING_CLASSES = {
-    0: "person", 1: "rider", 2: "car", 3: "truck",
-    4: "bus", 5: "train", 6: "motorcycle", 7: "bicycle",
+    0: "person",
+    1: "rider",
+    2: "car",
+    3: "truck",
+    4: "bus",
+    5: "train",
+    6: "motorcycle",
+    7: "bicycle",
 }
 SEM_CLASSES = {
-    0: "road", 1: "sidewalk", 2: "building", 3: "wall", 4: "fence", 5: "pole",
-    6: "traffic-light", 7: "traffic-sign", 8: "vegetation", 9: "terrain", 10: "sky",
-    11: "person", 12: "rider", 13: "car", 14: "truck", 15: "bus", 16: "train",
-    17: "motorcycle", 18: "bicycle",
+    0: "road",
+    1: "sidewalk",
+    2: "building",
+    3: "wall",
+    4: "fence",
+    5: "pole",
+    6: "traffic-light",
+    7: "traffic-sign",
+    8: "vegetation",
+    9: "terrain",
+    10: "sky",
+    11: "person",
+    12: "rider",
+    13: "car",
+    14: "truck",
+    15: "bus",
+    16: "train",
+    17: "motorcycle",
+    18: "bicycle",
+}
+
+# Cityscapes labelId -> 19 trainIds (the cityscapesScripts mapping); every other id -> 255 (ignore)
+LABEL_TO_TRAIN = {
+    7: 0,
+    8: 1,
+    11: 2,
+    12: 3,
+    13: 4,
+    17: 5,
+    19: 6,
+    20: 7,
+    21: 8,
+    22: 9,
+    23: 10,
+    24: 11,
+    25: 12,
+    26: 13,
+    27: 14,
+    28: 15,
+    31: 16,
+    32: 17,
+    33: 18,
 }
 
 
@@ -72,8 +120,12 @@ def build_yolo_boxlike(src_ds: str, out_name: str) -> None:
 
     (DATA / f"{out_name}.yaml").write_text(
         yaml.safe_dump(
-            {"path": str(out), "train": "images/train", "val": "images/val",
-             "names": THING_CLASSES},
+            {
+                "path": str(out),
+                "train": "images/train",
+                "val": "images/val",
+                "names": THING_CLASSES,
+            },
             sort_keys=False,
         )
     )
@@ -81,7 +133,7 @@ def build_yolo_boxlike(src_ds: str, out_name: str) -> None:
 
 def build_yolo_sem() -> None:
     """ultralytics task=semantic: images/{train,val} + masks/{train,val}, mask px = class id."""
-    src, out = DATA / "dataset", DATA / "yolo_sem"
+    src, out = DATA / "dataset_sem", DATA / "yolo_sem"
     fresh(out, [(sub, sp) for sub in ("images", "masks") for sp in ("train", "val")])
 
     for sp in ("train", "val"):
@@ -93,8 +145,13 @@ def build_yolo_sem() -> None:
 
     (DATA / "yolo_sem.yaml").write_text(
         yaml.safe_dump(
-            {"path": str(out), "train": "images/train", "val": "images/val",
-             "masks_dir": "masks", "names": SEM_CLASSES},
+            {
+                "path": str(out),
+                "train": "images/train",
+                "val": "images/val",
+                "masks_dir": "masks",
+                "names": SEM_CLASSES,
+            },
             sort_keys=False,
         )
     )
@@ -118,11 +175,52 @@ def build_rfdetr(src_ds: str, out_name: str) -> None:
 
     (out / "data.yaml").write_text(
         yaml.safe_dump(
-            {"train": "train/images", "val": "valid/images", "nc": len(THING_CLASSES),
-             "names": [THING_CLASSES[i] for i in range(len(THING_CLASSES))]},
+            {
+                "train": "train/images",
+                "val": "valid/images",
+                "nc": len(THING_CLASSES),
+                "names": [THING_CLASSES[i] for i in range(len(THING_CLASSES))],
+            },
             sort_keys=False,
         )
     )
+
+
+def build_dataset_sem(raw: Path | None) -> None:
+    """D-FINE sem_seg: images/ (symlinks to leftImg8bit) + labels/*.png (trainIds, 255 = ignore)
+    + train.csv/val.csv, the official 2975/500 split."""
+    import cv2
+    import numpy as np
+
+    if raw is None:
+        raise SystemExit("dataset_sem needs --raw /path/to/cityscapes_raw (leftImg8bit/, gtFine/)")
+    out = DATA / "dataset_sem"
+    if out.exists():  # every other layout links into it: never rebuild it silently
+        raise SystemExit(f"{out} already exists; delete it first to rebuild")
+    lut = np.full(256, 255, np.uint8)
+    for label_id, train_id in LABEL_TO_TRAIN.items():
+        lut[label_id] = train_id
+    (out / "images").mkdir(parents=True)
+    (out / "labels").mkdir()
+    for sp in ("train", "val"):
+        imgs = sorted((raw / "leftImg8bit" / sp).glob("*/*_leftImg8bit.png"), key=lambda p: p.name)
+        if not imgs:
+            raise SystemExit(
+                f"no images under {raw / 'leftImg8bit' / sp}: unzip "
+                f"leftImg8bit_trainvaltest.zip and gtFine_trainvaltest.zip into {raw}"
+            )
+        names = []
+        for img in imgs:
+            stem = img.name.removesuffix("_leftImg8bit.png")
+            gt = raw / "gtFine" / sp / img.parent.name / f"{stem}_gtFine_labelIds.png"
+            if not gt.exists():
+                raise SystemExit(f"missing ground truth {gt}")
+            link(img, out / "images" / f"{stem}.png")
+            labels = lut[cv2.imread(str(gt), cv2.IMREAD_GRAYSCALE)]
+            cv2.imwrite(str(out / "labels" / f"{stem}.png"), labels)
+            names.append(f"{stem}.png")
+        (out / f"{sp}.csv").write_text("\n".join(names) + "\n")
+        print(f"  dataset_sem/{sp}: {len(names)} images + trainId labels")
 
 
 BUILDERS = {
@@ -135,9 +233,21 @@ BUILDERS = {
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
-    ap.add_argument("--only", nargs="*", default=list(BUILDERS))
+    ap.add_argument(
+        "--only",
+        nargs="*",
+        default=list(BUILDERS),
+        choices=["dataset_sem", *BUILDERS],
+        help="default: every layout but dataset_sem",
+    )
+    ap.add_argument(
+        "--raw",
+        type=Path,
+        default=None,
+        help="unzipped Cityscapes (leftImg8bit/, gtFine/), for dataset_sem",
+    )
     args = ap.parse_args()
     for name in args.only:
         print(f"== {name} ==")
-        BUILDERS[name]()
+        build_dataset_sem(args.raw) if name == "dataset_sem" else BUILDERS[name]()
     print("\ndone")

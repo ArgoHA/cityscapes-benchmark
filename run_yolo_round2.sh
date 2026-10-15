@@ -13,7 +13,8 @@ set -u
 cd "$(dirname "$0")"
 
 EPOCHS=${EPOCHS:-100}
-LOGS=/home/argo/Desktop/Projects/cityscapes/output/logs
+ROOT="${CITYSCAPES_ROOT:-$(cd .. && pwd)}"  # workspace that holds data/ and output/ (paths.py)
+LOGS="$ROOT/output/logs"
 mkdir -p "$LOGS"
 echo $$ > /tmp/yolo_train.pid
 

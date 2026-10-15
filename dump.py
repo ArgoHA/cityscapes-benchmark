@@ -25,6 +25,16 @@ import numpy as np
 import torch
 from tqdm import tqdm
 
+from paths import DATA
+
+SEM_DATA = DATA / "dataset_sem"
+
+
+def sem_val_images(limit: int = 0) -> List[Path]:
+    """Official Cityscapes val (500 frames, 2048x1024), in val.csv order. GT: SEM_DATA/labels."""
+    stems = [ln.strip() for ln in (SEM_DATA / "val.csv").read_text().splitlines() if ln.strip()]
+    return [SEM_DATA / "images" / s for s in stems][: limit or None]
+
 
 def rle_encode(masks: np.ndarray) -> List[dict]:
     """pycocotools-compatible RLE (same backend D-FINE's bench uses to keep memory bounded)."""

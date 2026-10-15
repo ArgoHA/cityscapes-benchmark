@@ -65,7 +65,8 @@ from rfdetr.export.benchmark import TRTInference  # noqa: E402
 from rfdetr.utilities.box_ops import box_cxcywh_to_xyxy  # noqa: E402
 from torchmetrics.detection import MeanAveragePrecision  # noqa: E402
 
-ROOT = Path("/home/argo/Desktop/Projects/cityscapes")
+from paths import ROOT  # noqa: E402
+
 RUN_DIR = ROOT / "output" / "models" / "rfdetr_seg_medium"
 DEVICE = "cuda:0"
 
@@ -101,7 +102,11 @@ def make_infer(trt_model, post, means, stds, resolution: int, conf: float):
         outputs = trt_model({"input": batch})
 
         # --- postprocess: their PostProcess (top-k -> xyxy at orig size, masks -> orig size)
-        preds = {"pred_logits": outputs["labels"], "pred_boxes": outputs["dets"], "pred_masks": outputs["masks"]}
+        preds = {
+            "pred_logits": outputs["labels"],
+            "pred_boxes": outputs["dets"],
+            "pred_masks": outputs["masks"],
+        }
         h, w = img.size[1], img.size[0]
         target_sizes = torch.tensor([[h, w]], device=DEVICE)
         result = post(preds, target_sizes)[0]
@@ -134,7 +139,9 @@ def check_parity(model, infer, image_paths, conf: float, n: int = 20) -> dict:
     n_trt = n_torch = n_matched = 0
     for p in tqdm(image_paths[:n], desc="parity vs torch predict()"):
         img = Image.open(p).convert("RGB")
-        det = model.predict(img, threshold=conf, include_source_image=False)  # their fp32 torch path
+        det = model.predict(
+            img, threshold=conf, include_source_image=False
+        )  # their fp32 torch path
         trt_res, _ = infer(img)
 
         t_scores = trt_res["scores"].float().cpu().numpy()
@@ -172,7 +179,9 @@ def check_parity(model, infer, image_paths, conf: float, n: int = 20) -> dict:
     }
 
 
-def profile_stages(trt_model, post, means, stds, resolution: int, conf: float, paths, n: int = 50) -> dict:
+def profile_stages(
+    trt_model, post, means, stds, resolution: int, conf: float, paths, n: int = 50
+) -> dict:
     """Split the end-to-end call into preprocess / engine / postprocess, same sync discipline."""
 
     def clock(fn):
@@ -193,7 +202,11 @@ def profile_stages(trt_model, post, means, stds, resolution: int, conf: float, p
 
         batch, t_pre = clock(_pre)
         outputs, t_eng = clock(lambda: trt_model({"input": batch}))
-        packed = {"pred_logits": outputs["labels"], "pred_boxes": outputs["dets"], "pred_masks": outputs["masks"]}
+        packed = {
+            "pred_logits": outputs["labels"],
+            "pred_boxes": outputs["dets"],
+            "pred_masks": outputs["masks"],
+        }
         sizes = torch.tensor([[h, w]], device=DEVICE)
         result, t_pp = clock(lambda: post(packed, sizes)[0])
         _, t_thr = clock(lambda: {k: v[result["scores"] > conf] for k, v in result.items()})
@@ -216,16 +229,24 @@ def gt_from_target(target: dict) -> dict:
     entry = {"boxes": box_cxcywh_to_xyxy(target["boxes"]) * scale, "labels": target["labels"]}
     masks = target["masks"].bool()
     if masks.shape[-2:] != (int(h), int(w)):  # GT masks are stored at the model resolution
-        masks = NF.interpolate(masks.float().unsqueeze(1), size=(int(h), int(w)), mode="nearest").squeeze(1).bool()
+        masks = (
+            NF.interpolate(masks.float().unsqueeze(1), size=(int(h), int(w)), mode="nearest")
+            .squeeze(1)
+            .bool()
+        )
     entry["masks"] = masks
-    return {k: v.to(DEVICE) for k, v in entry.items()}  # preds live on GPU; the metric needs one device
+    return {
+        k: v.to(DEVICE) for k, v in entry.items()
+    }  # preds live on GPU; the metric needs one device
 
 
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--ckpt", default=str(RUN_DIR / "checkpoint_best_ema.pth"))
     ap.add_argument("--out", default=str(ROOT / "output" / "compare" / "rfdetr_seg_trt"))
-    ap.add_argument("--conf", type=float, default=0.5, help="operating point for latency, as in bench.py")
+    ap.add_argument(
+        "--conf", type=float, default=0.5, help="operating point for latency, as in bench.py"
+    )
     ap.add_argument("--limit", type=int, default=0, help="first N val images only (smoke test)")
     ap.add_argument("--parity", type=int, default=20, help="images for the TRT-vs-torch check")
     args = ap.parse_args()
@@ -237,7 +258,9 @@ def main() -> None:
 
     model = RFDETRSegMedium(pretrain_weights=args.ckpt)
     resolution = model.model.resolution
-    print(f"resolution={resolution} num_select={model.model_config.num_select} classes={model.class_names}")
+    print(
+        f"resolution={resolution} num_select={model.model_config.num_select} classes={model.class_names}"
+    )
 
     engine_path = build_engine(model, out_dir)
     trt_model = TRTInference(engine_path=str(engine_path), device=DEVICE, sync_mode=True)
@@ -280,12 +303,24 @@ def main() -> None:
         latency.append((time.perf_counter() - t0) * 1000)
 
         _, target = ds[i]  # GT (off the clock)
-        pred = {"boxes": full["boxes"], "scores": full["scores"], "labels": full["labels"],
-                "masks": full["masks"].squeeze(1)}  # PostProcess emits [K,1,H,W]; the metric wants [K,H,W]
+        pred = {
+            "boxes": full["boxes"],
+            "scores": full["scores"],
+            "labels": full["labels"],
+            "masks": full["masks"].squeeze(1),
+        }  # PostProcess emits [K,1,H,W]; the metric wants [K,H,W]
         metric.update([pred], [gt_from_target(target)])
 
-    stages = profile_stages(trt_model, post, model_means, model_stds, resolution, args.conf,
-                            [image_paths[i] for i in idxs], n=args.parity)
+    stages = profile_stages(
+        trt_model,
+        post,
+        model_means,
+        model_stds,
+        resolution,
+        args.conf,
+        [image_paths[i] for i in idxs],
+        n=args.parity,
+    )
 
     m = {k: float(v) for k, v in metric.compute().items() if v.numel() == 1}
     result = {
@@ -304,8 +339,10 @@ def main() -> None:
     }
     (out_dir / "trt_result.json").write_text(json.dumps(result, indent=2))
     print("\n" + json.dumps(result, indent=2))
-    print(f"\ntraining-time oracle (metrics.csv, best EMA epoch): "
-          f"box mAP@50 0.6124 | mask mAP@50 0.5783 | mask mAP@50-95 0.3293")
+    print(
+        "\ntraining-time oracle (metrics.csv, best EMA epoch): "
+        "box mAP@50 0.6124 | mask mAP@50 0.5783 | mask mAP@50-95 0.3293"
+    )
 
 
 if __name__ == "__main__":

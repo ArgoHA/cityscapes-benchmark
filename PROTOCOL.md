@@ -1,11 +1,16 @@
-# Benchmark protocol: D-FINE-seg vs YOLO26 vs RF-DETR on Cityscapes
+# Benchmark protocol: D-FINE-seg vs YOLO26, RF-DETR, EfficientViT-Seg, SegFormer, Mask2Former on Cityscapes
 
-This document is the full experimental protocol behind the numbers in [`RESULTS.md`](RESULTS.md):
-how every model was trained, exported, run, timed and scored. It is written to be adversarial
-against ourselves — the section [Things that could still make this unfair](#things-that-could-still-make-this-unfair)
+This document is the full experimental protocol behind both rounds of this benchmark: how every
+model was trained, exported, run, timed and scored. It is written to be adversarial against
+ourselves — the section [Things that could still make this unfair](#9-things-that-could-still-make-this-unfair)
 lists every remaining asymmetry we know about.
 
-Results: [`RESULTS.md`](RESULTS.md) / [`RESULTS.csv`](RESULTS.csv).
+- **Round 1** (§1–10): detection, instance and semantic segmentation at 640, D-FINE-seg vs YOLO26
+  vs RF-DETR, all trained by us. Results: [`RESULTS.md`](RESULTS.md) / [`RESULTS.csv`](RESULTS.csv).
+- **Native-resolution semantic segmentation** (§11, asymmetries in §9 items 10–18): D-FINE-seg
+  vs the official Cityscapes checkpoints of YOLO26-sem, EfficientViT-Seg, SegFormer and
+  Mask2Former at 1024×2048. Results: [`README.md`](README.md) /
+  [`RESULTS_SEMSEG_NATIVE.md`](RESULTS_SEMSEG_NATIVE.md).
 
 ---
 
@@ -304,6 +309,8 @@ is not silently mangling the models we don't.
 
 Every asymmetry we are aware of, stated plainly.
 
+### Round 1 (640, three tasks)
+
 1. **Sizes are latency-matched, not param-matched.** Each rival carries 2–3× the params and a
    *larger* engine budget than D-FINE (§4). This is generous to the rival, by design — but it does
    mean "D-FINE beats a model with 2.2× the params" is a latency-normalised claim, not a
@@ -373,6 +380,142 @@ Every asymmetry we are aware of, stated plainly.
    0.578 logged, mask mAP@50-95 0.334 vs 0.329, box mAP@50 0.611 vs 0.612 — which is what proves the
    engine we benched is not silently degraded. Script: `rfdetr_trt.py`.
 
+### Native-resolution semantic segmentation (§11)
+
+These apply to the native sem-seg table and to every claim made from it.
+
+10. **Init differs, partly in D-FINE-seg's favour.** D-FINE-seg S/M/L/X start from Objects365 →
+    COCO detection weights (`dfine_{s,m,l,x}_obj2coco.pt`); N starts from COCO detection
+    (`dfine_n_coco.pt`), because no `obj2coco` N checkpoint exists. YOLO26-sem starts from COCO
+    instance-seg weights and uses no Objects365. EfficientViT-Seg, SegFormer and Mask2Former start
+    from ImageNet (Mask2Former Swin-B/L from ImageNet-21k, R50/R101/Swin-T/S from ImageNet-1k). On
+    S, the Objects365 init was worth +0.17 val mIoU over COCO detection, in single-seed runs that
+    are not epoch-matched ([`train_configs/`](train_configs/README.md)).
+
+11. **Checkpoint selection on val.** D-FINE-seg's `model.pt` is its best epoch on the same 500 val
+    images the table reports; YOLO26-sem's `best.pt` has the same bias, SegFormer reports its final
+    iteration. The last-epoch val mIoU of every D-FINE-seg size is in the README and in
+    [`train_configs/README.md`](train_configs/README.md). It is 0.23 (X) to 0.93 (M) below the best
+    epoch. D-FINE-L's last epoch is still +0.04 over YOLO26-x. One seed per size.
+
+12. **Training budgets differ, in the rivals' favour.** D-FINE-seg: 62–75 epochs at full
+    1024×2048, batch 2–5. YOLO26-sem: 220–240 epochs (`train_args` in the checkpoints).
+    SegFormer: 160k iterations at batch 8, about 430 epochs. Mask2Former: 90k iterations at batch
+    16 on 512×1024 crops with 0.5–2.0× scale jitter, about 480 epochs. EfficientViT's Cityscapes
+    recipe is not released.
+
+13. **SegFormer runs whole-image; its paper uses sliding windows.** The paper numbers come from
+    1024×1024 windows with stride 768, three forward passes per frame. Every model here gets one
+    whole-frame pass, which costs SegFormer 0.7–1.8 mIoU. Our sliding-window run reproduces the
+    paper (table below), so the gap is the protocol, not the port.
+
+14. **EfficientViT runs with its `LiteMLA` attention pinned to fp32.** Their PyTorch code runs
+    `relu_linear_att` in fp32 by design (autocast off): `v @ kᵀ` sums over every token and
+    overflows fp16 at 1024×2048. The ONNX graph does not record that cast, and a plain fp16 engine
+    collapses B1, B2, B3 and L1 to 2–6 mIoU (L2: 80.0). The engines keep exactly those ops in fp32
+    (`infer_efficientvit.py::LITEMLA_FP32`); everything else is fp16. This follows their code; it
+    is not a tuning choice, and it costs them engine time.
+
+15. **Mask2Former-R101 loses 0.39 mIoU under TensorRT fp16** against its PyTorch run, past the
+    0.3 gate below. It is diffuse fp16 noise, not one overflowing op, so it is disclosed rather than
+    pinned. The other five Mask2Former models are within 0.13.
+
+16. **Postprocessing differs by design and is part of each framework.** YOLO26-sem: bilinear ×8 and
+    argmax inside the engine. SegFormer: bilinear ×4 of the logits, then argmax. EfficientViT:
+    bicubic ×8 of the logits, then argmax. Mask2Former: 100 mask logits upsampled to 1024×2048 in
+    fp32, then their semantic inference. D-FINE-seg: argmax, then nearest-neighbour upsampling.
+    The engine-ms column isolates the network.
+
+17. **e2e latency measures each framework's shipped Python path.** EfficientViT's demo transforms
+    normalise the frame on the CPU and copy it pageable to the GPU (10–11 ms over engine time);
+    Mask2Former's `DefaultPredictor` does CPU float32 preprocessing. That is their shipped code, so
+    it stays in e2e; engine ms is reported next to it.
+
+18. **Plumbing that is ours** (no model logic, no pre/postprocessing):
+    - SegFormer, EfficientViT and Mask2Former ship no TensorRT runtime. Their engines run through
+      [`trt_runner.py`](trt_runner.py) (bind buffers + `execute_async_v3`), and are built from ONNX
+      by [`build_engine.py`](build_engine.py) at TensorRT 10.13.3.9 with no workspace cap, as
+      ultralytics' exporter does. A 4 GB cap leaves SegFormer-B4 with no tactic for one layer.
+    - SegFormer: ONNX is a TorchScript trace of `model(pixel_values).logits` (opset 17) under
+      `torch.no_grad()`. The HF processor gets `size={"height": 1024, "width": 2048}`; its default
+      would squash the frame to 512×512 or 1024×1024. It runs on the GPU (`device="cuda"`, a
+      documented argument).
+    - EfficientViT: their `export_onnx` call (opset 11 + onnxsim) on the loaded Cityscapes model
+      (their script builds with `pretrained=False`), with `dynamo=False` pinned because torch ≥2.9
+      changed the default exporter. Their demo passes `np.ones_like(image)` as a dummy label; we
+      pass a 1×1 dummy.
+    - Mask2Former: the engine replaces exactly `backbone` + `sem_seg_head` inside their
+      `DefaultPredictor`; the traced graph uses their pure-PyTorch deformable-attention fallback,
+      because the compiled op has no ONNX export. `setup_venvs.sh` makes one build-compatibility
+      edit to their CUDA op for torch 2.13 (`value.type()` → `value.scalar_type()`).
+
+#### Reproduction gate: each rival reproduces its published number before it enters the table
+
+A model enters the table only after its own protocol, run in PyTorch through its own code,
+reproduces the published val mIoU. YOLO26-sem's docs table equals the val mIoU stored in each
+checkpoint; ultralytics' own val reproduces it at native resolution (`imgsz=2048, rect=True` on
+8.4.92, see [`repro_yolo_val.py`](repro_yolo_val.py)). For the other families the harness runs
+their pre/postprocessing with the PyTorch model.
+
+| model | published val mIoU | our reproduction, their protocol | Δ | how |
+|---|---:|---:|---:|---|
+| YOLO26n-sem | 78.3 (stored 78.259) | 78.255 | -0.004 vs stored | ultralytics' own val, `repro_yolo_val.py` |
+| YOLO26s-sem | 80.8 (stored 80.804) | 80.806 | +0.002 vs stored | ultralytics' own val, `repro_yolo_val.py` |
+| YOLO26m-sem | 82.0 (stored 82.023) | 82.023 | +0.000 vs stored | ultralytics' own val, `repro_yolo_val.py` |
+| YOLO26l-sem | 82.9 (stored 82.943) | 82.944 | +0.001 vs stored | ultralytics' own val, `repro_yolo_val.py` |
+| YOLO26x-sem | 83.6 (stored 83.583) | 83.583 | +0.000 vs stored | ultralytics' own val, `repro_yolo_val.py` |
+| SegFormer-B0 | 76.2 | 76.19 | -0.01 | harness, PyTorch, sliding window 1024×1024 / stride 768 |
+| SegFormer-B1 | 78.5 | 78.38 | -0.12 | harness, PyTorch, sliding window 1024×1024 / stride 768 |
+| SegFormer-B2 | 81.0 | 80.82 | -0.18 | harness, PyTorch, sliding window 1024×1024 / stride 768 |
+| SegFormer-B3 | 81.7 | 81.50 | -0.20 | harness, PyTorch, sliding window 1024×1024 / stride 768 |
+| SegFormer-B4 | 82.3 | 82.48 | +0.18 | harness, PyTorch, sliding window 1024×1024 / stride 768 |
+| SegFormer-B5 | 82.4 | 82.22 | -0.18 | harness, PyTorch, sliding window 1024×1024 / stride 768 |
+| EfficientViT-B0 | 75.653 | 75.66 | +0.01 | harness, PyTorch, whole 1024×2048 |
+| EfficientViT-B1 | 80.547 | 80.55 | +0.00 | harness, PyTorch, whole 1024×2048 |
+| EfficientViT-B2 | 82.073 | 82.07 | -0.00 | harness, PyTorch, whole 1024×2048 |
+| EfficientViT-B3 | 83.016 | 83.02 | +0.00 | harness, PyTorch, whole 1024×2048 |
+| EfficientViT-L1 | 82.716 | 82.72 | +0.00 | harness, PyTorch, whole 1024×2048 |
+| EfficientViT-L2 | 83.228 | 83.23 | +0.00 | harness, PyTorch, whole 1024×2048 |
+| Mask2Former-R50 | 79.4 | 79.40 | +0.00 | harness, PyTorch, whole 1024×2048 |
+| Mask2Former-R101 | 80.1 | 80.11 | +0.01 | harness, PyTorch, whole 1024×2048 |
+| Mask2Former-Swin-T | 82.1 | 82.13 | +0.03 | harness, PyTorch, whole 1024×2048 |
+| Mask2Former-Swin-S | 82.6 | 82.56 | -0.04 | harness, PyTorch, whole 1024×2048 |
+| Mask2Former-Swin-B | 83.3 | 83.33 | +0.03 | harness, PyTorch, whole 1024×2048 |
+| Mask2Former-Swin-L | 83.3 | 83.35 | +0.05 | harness, PyTorch, whole 1024×2048 |
+
+#### fp16 gate: TensorRT fp16 vs the same pipeline in PyTorch
+
+Same pre/postprocessing, same scorer; only the network runs in PyTorch fp32 instead of the
+TensorRT fp16 engine. The gate is |Δ| ≤ 0.3 mIoU. Every model passes except Mask2Former-R101
+(item 15). For D-FINE-seg the reference is the PyTorch val of the same checkpoint during training
+([`train_configs/README.md`](train_configs/README.md)): the engines are within 0.08 mIoU of it.
+
+| model | TRT fp16 mIoU | torch mIoU | TRT − torch |
+|---|---:|---:|---:|
+| YOLO26n-sem | 78.25 | 78.26 | -0.01 |
+| YOLO26s-sem | 80.80 | 80.80 | +0.00 |
+| YOLO26m-sem | 82.02 | 82.02 | +0.00 |
+| YOLO26l-sem | 82.95 | 82.94 | +0.01 |
+| YOLO26x-sem | 83.58 | 83.58 | +0.00 |
+| SegFormer-B0 | 74.43 | 74.43 | +0.00 |
+| SegFormer-B1 | 77.42 | 77.42 | +0.00 |
+| SegFormer-B2 | 79.94 | 79.94 | +0.00 |
+| SegFormer-B3 | 80.77 | 80.77 | +0.00 |
+| SegFormer-B4 | 81.15 | 81.15 | +0.00 |
+| SegFormer-B5 | 81.41 | 81.41 | +0.00 |
+| EfficientViT-B0 | 75.63 | 75.66 | -0.03 |
+| EfficientViT-B1 | 80.53 | 80.55 | -0.02 |
+| EfficientViT-B2 | 82.06 | 82.07 | -0.01 |
+| EfficientViT-B3 | 83.01 | 83.02 | -0.01 |
+| EfficientViT-L1 | 82.64 | 82.72 | -0.08 |
+| EfficientViT-L2 | 83.20 | 83.23 | -0.03 |
+| Mask2Former-R50 | 79.30 | 79.40 | -0.10 |
+| Mask2Former-R101 | 79.72 | 80.11 | -0.39 |
+| Mask2Former-Swin-T | 82.19 | 82.13 | +0.06 |
+| Mask2Former-Swin-S | 82.43 | 82.56 | -0.13 |
+| Mask2Former-Swin-B | 83.29 | 83.33 | -0.04 |
+| Mask2Former-Swin-L | 83.33 | 83.35 | -0.02 |
+
 ---
 
 ## 10. Reproducing
@@ -423,10 +566,91 @@ idle-GPU session, and scores every dump through the single shared scorer (§8).
 | [`bench_all.py`](bench_all.py) | **entrypoint** — the two-stage protocol end to end |
 | [`make_results.py`](make_results.py) | generate `RESULTS.md` / `RESULTS.csv` from the bench CSVs |
 
-> **Note on paths:** the scripts currently hard-code absolute paths to the dataset and model
-> directories at the top of each file (`ROOT`, `DATA`, `M`, …). Edit those to run elsewhere.
+> **Note on paths:** every script resolves the dataset and output directories through
+> [`paths.py`](paths.py): one workspace that holds this repo, `data/` and `output/`
+> (`CITYSCAPES_ROOT`, default: the parent of this repo), and a D-FINE-seg checkout
+> (`DFINE_SEG_ROOT`, default: `../../D-FINE-seg`).
 
 ### Hardware
 
 Single NVIDIA RTX 5070 Ti (16 GB), TensorRT 10.13.3.9, FP16, batch 1. All latency measurements on
 an idle GPU.
+
+---
+
+## 11. Native-resolution semantic segmentation
+
+The second round: semantic segmentation only, at Cityscapes' native resolution, against the
+official Cityscapes checkpoints of four families. Results: [`README.md`](README.md) and the
+generated [`RESULTS_SEMSEG_NATIVE.md`](RESULTS_SEMSEG_NATIVE.md) /
+[`RESULTS_SEMSEG_NATIVE.csv`](RESULTS_SEMSEG_NATIVE.csv). Asymmetries and gates: §9, items 10–18.
+
+The round-1 rules carry over unchanged: each framework runs its own shipped pre- and
+postprocessing, one scorer scores everyone, and both latency columns come from one idle-GPU
+session. **No rival is retrained.** The comparison is D-FINE-seg's recipe against each team's own
+best published checkpoint, which leaves no room for "you trained it badly".
+
+### 11.1 Comparison contract
+
+| axis | value |
+|---|---|
+| data | official Cityscapes **val**, 500 images, 19 trainIds, ignore 255. Val is the only split every rival publishes; test labels sit behind the evaluation server |
+| scoring | at the original 1024×2048, by [`score.py`](score.py) → D-FINE-seg's `SemSegValidator` (§8); mIoU (headline), pixel accuracy, per-class IoU |
+| network input | **1024×2048 for every model**: the whole frame, one forward pass, single scale, no flip or other TTA |
+| runtime | TensorRT **10.13.3.9**, fp16, batch 1, static shape, one RTX 5070 Ti; the bench refuses to start while any other process holds the GPU |
+| pre/postprocess | each framework's own shipped code (§1), never written by us |
+| latency | **e2e**: the framework's own inference call, image decode and the result's device-to-host copy off the clock (§6, [`dump.py`](dump.py)); **engine**: TensorRT execute only, one loop for every engine ([`measure_engine.py`](measure_engine.py)) |
+| params / GMACs | recounted for every model with one counter, torch's `FlopCounterMode`, at 1024×2048 ([`model_stats.py`](model_stats.py)) |
+
+Why one whole-frame pass for everyone:
+
+- **YOLO26-sem** publishes native 1024×2048 numbers. Its checkpoints were trained with
+  `imgsz=1024` (short side 1024, so native scale) by ultralytics 8.4.50, whose val scored at native
+  resolution. The ultralytics 8.4.92 used here resizes the long side to `imgsz` in val, so
+  `imgsz=1024` would score at 512×1024; `imgsz=2048, rect=True` restores the native protocol and
+  reproduces the stored numbers ([`repro_yolo_val.py`](repro_yolo_val.py)).
+- **EfficientViT-Seg** publishes whole-image 1024×2048 numbers measured with TensorRT fp16, batch 1:
+  already this protocol.
+- **Mask2Former**'s Cityscapes test config is `MIN_SIZE_TEST 1024`, `MAX_SIZE_TEST 2048`, no TTA,
+  i.e. one whole 1024×2048 pass.
+- **SegFormer** publishes sliding-window numbers (1024×1024 windows, stride 768, three passes per
+  frame). That is not a single-pass deployment, so the table runs it whole-image like everyone
+  else, and a separate sliding-window run checks that our port reproduces the paper (§9 item 13).
+
+### 11.2 Models and inference paths
+
+| family | checkpoints | inference path (theirs) | engine |
+|---|---|---|---|
+| D-FINE-seg | N, S, M, L, X, trained here ([`train_configs/`](train_configs/README.md)) | `TRTModel`, the wrapper D-FINE-seg ships ([`infer_dfine.py`](infer_dfine.py)) | D-FINE-seg's own export, fp16, static 1024×2048 |
+| YOLO26-sem | `yolo26{n,s,m,l,x}-sem.pt`, ultralytics release assets, run with ultralytics 8.4.92 | `YOLO(engine).predict()` ([`infer_yolo.py`](infer_yolo.py)) | `YOLO(w).export(format="engine", imgsz=(1024, 2048), half=True)`; bilinear ×8 and argmax are in the graph |
+| EfficientViT-Seg | HF `han-cai/efficientvit-seg`, B0–B3, L1, L2; their repo pinned in [`setup_venvs.sh`](setup_venvs.sh) | their eval transforms (ImageNet mean/std) → engine → their bicubic `resize` to the image → argmax ([`infer_efficientvit.py`](infer_efficientvit.py)) | their `export_onnx` (opset 11 + onnxsim) → [`build_engine.py`](build_engine.py), `LiteMLA` in fp32 (§9 item 14) |
+| SegFormer | HF `nvidia/segformer-b{0..5}-finetuned-cityscapes-1024-1024`, transformers 5.19.0 | `SegformerImageProcessor` → engine → `post_process_semantic_segmentation(target_sizes=…)` ([`infer_segformer.py`](infer_segformer.py)) | TorchScript ONNX trace of the logits (opset 17) → [`build_engine.py`](build_engine.py) |
+| Mask2Former | FAIR MODEL_ZOO "Cityscapes Semantic Segmentation": R50, R101, Swin-T/S/B/L; detectron2 and Mask2Former pinned in [`setup_venvs.sh`](setup_venvs.sh) | detectron2 `DefaultPredictor` end to end (their preprocessing, `semantic_inference`, `sem_seg_postprocess`) + the argmax of their `SemSegEvaluator`; the engine stands in for `backbone` + `sem_seg_head` ([`infer_mask2former.py`](infer_mask2former.py)) | TorchScript ONNX trace of `backbone` + `sem_seg_head` → [`build_engine.py`](build_engine.py) |
+
+Each family lives in its own venv, all on torch 2.13 and TensorRT 10.13.3.9; D-FINE-seg's side
+(scorer, D-FINE-seg inference, engine timing) runs in the D-FINE-seg uv env. Not included:
+PIDNet, DDRNet, PP-LiteSeg, SCTNet.
+
+### 11.3 D-FINE-seg training
+
+Five runs, one per size, at full 1024×2048 frames with no resize (`img_size: [1024, 2048]`,
+`keep_ratio: False`), D-FINE-seg's default sem-seg recipe, and the init and epoch budgets of §9
+items 10–12. The exact configs, the D-FINE-seg commit, per-run best and last epochs and the
+train/export commands are in [`train_configs/README.md`](train_configs/README.md).
+
+### 11.4 Gates
+
+A rival enters the table only after two gates (tables in §9):
+
+1. **Reproduction.** Its own protocol, in PyTorch through its own code, must reproduce the
+   published val mIoU (±0.3). All 23 rival checkpoints pass: YOLO26-sem within 0.004 of the
+   stored value, EfficientViT and Mask2Former within 0.05, SegFormer (sliding window) within 0.2.
+2. **fp16.** The TensorRT fp16 pipeline must stay within 0.3 mIoU of the same pipeline in
+   PyTorch. Every model passes except Mask2Former-R101 (−0.39, disclosed in §9 item 15).
+
+### 11.5 Reproducing
+
+Steps, workspace layout and the script table: [`README.md`](README.md#reproduce). The entry point
+is [`bench_semseg_native.py`](bench_semseg_native.py): `--backends trt torch slide` produces the
+table, the fp16 gate and the SegFormer reproduction; [`make_results_native.py`](make_results_native.py)
+writes the results files from its CSVs, refusing any partial (`--limit`) run.

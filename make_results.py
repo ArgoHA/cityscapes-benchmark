@@ -4,16 +4,14 @@ Nothing here is hand-typed: accuracy/e2e-latency/conf come from <task>_final.csv
 from the engine_ms column bench_all wrote in the same idle-GPU session. Only PARAMS is a literal,
 and each entry is sourced below.
 
-  uv run --project /home/argo/Desktop/Projects/D-FINE-seg python make_results.py
+  uv run --project "$DFINE_SEG_ROOT" python make_results.py
 """
-
-from pathlib import Path
 
 import pandas as pd
 
-R = Path("/home/argo/Desktop/Projects/cityscapes")
-C = R / "output" / "compare"
-RIV = R / "cityscapes-benchmark"
+from paths import OUTPUT, RIV
+
+C = OUTPUT / "compare"
 
 # D-FINE  : sum of float params in output/models/<run>/model.pt
 # YOLO26  : ultralytics' own "YOLO26x summary: N layers, P parameters" line in its training log
@@ -38,15 +36,43 @@ TASKS = {
     "sem_seg": ("Semantic segmentation", "mIoU", "mIoU"),
 }
 COLS = {
-    "detect": ["params_M", "input", "conf", "f1", "precision", "recall", "iou", "latency",
-               "engine_ms"],
-    "segment": ["params_M", "input", "conf", "f1", "precision", "recall", "iou", "latency",
-                "engine_ms"],
+    "detect": [
+        "params_M",
+        "input",
+        "conf",
+        "f1",
+        "precision",
+        "recall",
+        "iou",
+        "latency",
+        "engine_ms",
+    ],
+    "segment": [
+        "params_M",
+        "input",
+        "conf",
+        "f1",
+        "precision",
+        "recall",
+        "iou",
+        "latency",
+        "engine_ms",
+    ],
     "sem_seg": ["params_M", "input", "mIoU", "pixel_acc", "latency", "engine_ms"],
 }
-HEAD = {"params_M": "params (M)", "input": "input", "conf": "conf", "f1": "**F1**",
-        "precision": "precision", "recall": "recall", "iou": "IoU", "mIoU": "**mIoU**",
-        "pixel_acc": "pixel acc", "latency": "e2e ms", "engine_ms": "engine ms"}
+HEAD = {
+    "params_M": "params (M)",
+    "input": "input",
+    "conf": "conf",
+    "f1": "**F1**",
+    "precision": "precision",
+    "recall": "recall",
+    "iou": "IoU",
+    "mIoU": "**mIoU**",
+    "pixel_acc": "pixel acc",
+    "latency": "e2e ms",
+    "engine_ms": "engine ms",
+}
 
 
 METHOD = """## How these numbers were produced
@@ -150,8 +176,11 @@ def md_table(task: str, df: pd.DataFrame) -> str:
                 cells.append("—")
                 continue
             s = f"{v:g}" if isinstance(v, (int, float)) else str(v)  # `input` is e.g. "640x640"
-            best = (c == key and v == best_acc) or (c == "latency" and v == best_lat) \
+            best = (
+                (c == key and v == best_acc)
+                or (c == "latency" and v == best_lat)
                 or (c == "engine_ms" and v == best_eng)
+            )
             cells.append(f"**{s}**" if best else s)
         star = "**" if row[key] == best_acc else ""
         lines.append(f"| {star}{name}{star} | " + " | ".join(cells) + " |")
@@ -164,12 +193,31 @@ if __name__ == "__main__":
     flat = []
     for task, df in dfs.items():
         for name, row in df.iterrows():
-            flat.append({"task": task, "model": name,
-                         **{c: row.get(c) for c in
-                            ["params_M", "input", "conf", "f1", "precision", "recall", "iou",
-                             "mIoU", "pixel_acc", "latency", "engine_ms"]}})
+            flat.append(
+                {
+                    "task": task,
+                    "model": name,
+                    **{
+                        c: row.get(c)
+                        for c in [
+                            "params_M",
+                            "input",
+                            "conf",
+                            "f1",
+                            "precision",
+                            "recall",
+                            "iou",
+                            "mIoU",
+                            "pixel_acc",
+                            "latency",
+                            "engine_ms",
+                        ]
+                    },
+                }
+            )
     out = pd.DataFrame(flat).rename(
-        columns={"latency": "latency_e2e_ms", "engine_ms": "latency_engine_ms"})
+        columns={"latency": "latency_e2e_ms", "engine_ms": "latency_engine_ms"}
+    )
     out.to_csv(RIV / "RESULTS.csv", index=False)
 
     body = [
@@ -187,4 +235,4 @@ if __name__ == "__main__":
     body += [METHOD]
     (RIV / "RESULTS.md").write_text("\n".join(body))
     print((RIV / "RESULTS.md").read_text())
-    print(f"wrote {RIV/'RESULTS.md'} and {RIV/'RESULTS.csv'}")
+    print(f"wrote {RIV / 'RESULTS.md'} and {RIV / 'RESULTS.csv'}")

@@ -1,20 +1,28 @@
-# macOS
-.DS_Store
+# venvs (one per framework, each pinned to TensorRT 10.13.3.9)
+.venv*/
 
-# Python
-__pycache__/
-*.py[cod]
-*.egg-info/
-.venv/
-venv/
-env/
-
-# Data / models / outputs
+# model artifacts / build outputs — none of this belongs in the repo
 *.pt
 *.pth
-*.engine
+*.pkl
 *.onnx
+*.engine
+*.ckpt
+yolo26*.pt
+yolo26*.onnx
+yolo26*.engine
+calib/
 runs/
-weights/
-datasets/
-outputs/
+
+# native sem_seg bench: exported models + pinned rival repos (setup_venvs.sh)
+artifacts/
+third_party/
+
+# local working notes and plot drafts
+notes/
+plot_candidates/
+
+__pycache__/
+*.pyc
+.ruff_cache/
+.DS_Store

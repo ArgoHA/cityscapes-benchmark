@@ -16,12 +16,12 @@ rasterizes polygon labels into masks for the segmentation head.
 """
 
 import argparse
-from pathlib import Path
 
 import rfdetr
 
-DATA = Path("/home/argo/Desktop/Projects/cityscapes/data")
-OUT = Path("/home/argo/Desktop/Projects/cityscapes/output/models")
+from paths import DATA, OUTPUT
+
+OUT = OUTPUT / "models"
 
 # variant -> (class name, dataset dir)
 VARIANTS = {

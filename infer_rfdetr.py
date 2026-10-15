@@ -42,8 +42,8 @@ from rfdetr.models.postprocess import PostProcess  # noqa: E402
 
 import dump  # noqa: E402
 from build_engine import build  # noqa: E402
+from paths import ROOT  # noqa: E402
 
-ROOT = Path("/home/argo/Desktop/Projects/cityscapes")
 VAL_CSV = ROOT / "data" / "dataset" / "val.csv"
 IMAGES = ROOT / "data" / "dataset" / "images"
 

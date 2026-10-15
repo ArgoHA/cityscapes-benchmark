@@ -8,20 +8,47 @@ Engine is produced by ultralytics' own exporter (`export(format="engine", half=T
 builds with the venv's TensorRT 10.13.3.9 - the same version D-FINE's engines use.
 
   .venv-yolo/bin/python infer_yolo.py --weights <run>/weights/best.pt --task detect
+
+Native-res semantic (exports into --engine-dir, never next to the .pt, so an engine built at another
+resolution can't be picked up by accident):
+
+  .venv-yolo/bin/python infer_yolo.py --weights yolo26x-sem.pt --task semantic --name YOLO26-x \
+      --imgsz 1024 2048 --engine-dir artifacts/yolo/yolo26x-sem_1024x2048
 """
 
 import argparse
+import shutil
 from pathlib import Path
 
 import cv2
 import numpy as np
+import torch
 from ultralytics import YOLO
 
 import dump
+from model_stats import model_stats
+from paths import ROOT
 
-ROOT = Path("/home/argo/Desktop/Projects/cityscapes")
 VAL_CSV = ROOT / "data" / "dataset" / "val.csv"
 IMAGES = ROOT / "data" / "dataset" / "images"
+
+
+def resolve_engine(w: Path, imgsz, engine_dir: str | None) -> str:
+    """Export with ultralytics' own TRT exporter, reusing a cached engine if one exists."""
+    if engine_dir is None:  # round-1 behaviour: engine next to the .pt
+        cached = w.with_suffix(".engine")
+        if cached.exists():
+            return str(cached)
+        return YOLO(str(w)).export(format="engine", imgsz=imgsz, half=True, device=0)
+    d = Path(engine_dir)
+    cached = d / f"{w.stem}.engine"
+    if cached.exists():
+        return str(cached)
+    d.mkdir(parents=True, exist_ok=True)
+    pt = d / w.name
+    shutil.copy2(w, pt)  # the exporter writes .onnx/.engine next to its input
+    return YOLO(str(pt)).export(format="engine", imgsz=imgsz, half=True, device=0, batch=1)
+
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
@@ -29,7 +56,14 @@ if __name__ == "__main__":
     ap.add_argument("--task", required=True, choices=["detect", "segment", "semantic"])
     ap.add_argument("--name", required=True)
     ap.add_argument("--conf", type=float, default=0.5)
-    ap.add_argument("--imgsz", type=int, default=640)
+    ap.add_argument("--imgsz", type=int, nargs="+", default=[640], help="S or H W")
+    ap.add_argument("--engine-dir", default=None, help="export/cache dir (keyed by resolution)")
+    ap.add_argument(
+        "--backend",
+        default="trt",
+        choices=["trt", "torch"],
+        help="torch = the .pt through the same predictor (TRT-vs-torch gate)",
+    )
     ap.add_argument("--out", default=None)
     ap.add_argument("--limit", type=int, default=0, help="latency-calibration: first N images only")
     # ultralytics' native-resolution mask option: protos are upsampled straight to the original
@@ -37,26 +71,26 @@ if __name__ == "__main__":
     # resampled again. Costs latency, which we measure.
     ap.add_argument("--retina-masks", type=int, default=1)
     args = ap.parse_args()
+    imgsz = args.imgsz[0] if len(args.imgsz) == 1 else tuple(args.imgsz)
+    hw = (imgsz, imgsz) if isinstance(imgsz, int) else imgsz
 
     w = Path(args.weights)
-    if w.suffix == ".pt":  # export with ultralytics' own TRT exporter (reuse if already built)
-        cached = w.with_suffix(".engine")
-        engine = (
-            str(cached)
-            if cached.exists()
-            else YOLO(str(w)).export(format="engine", imgsz=args.imgsz, half=True, device=0)
-        )
+    if args.backend == "torch":
+        engine = str(w)
+    elif w.suffix == ".pt":
+        engine = resolve_engine(w, imgsz, args.engine_dir)
     else:
         engine = str(w)
-    print(f"engine: {engine}")
+    print(f"model: {engine}")
 
     model = YOLO(engine, task=args.task)
-    stems = [ln.strip() for ln in VAL_CSV.read_text().splitlines() if ln.strip()]
-    images = [IMAGES / s for s in stems]
-    if args.limit:
-        images = images[: args.limit]
+    if args.task == "semantic":
+        images = dump.sem_val_images(args.limit)
+    else:
+        stems = [ln.strip() for ln in VAL_CSV.read_text().splitlines() if ln.strip()]
+        images = [IMAGES / s for s in stems][: args.limit or None]
 
-    kw = dict(imgsz=args.imgsz, conf=args.conf, device=0, verbose=False)
+    kw = dict(imgsz=imgsz, conf=args.conf, device=0, verbose=False)
     if args.task == "segment":
         kw["retina_masks"] = bool(args.retina_masks)
 
@@ -86,6 +120,19 @@ if __name__ == "__main__":
             )
         return out
 
+    extra = {
+        "engine": str(engine),
+        "conf": args.conf,
+        "imgsz": imgsz,
+        "backend": args.backend,
+        "input": f"{hw[0]}x{hw[1]}",
+        "retina_masks": bool(args.retina_masks) if args.task == "segment" else None,
+    }
+    if w.suffix == ".pt":  # count on the fused torch model, i.e. the graph that gets exported
+        net = YOLO(str(w)).model.fuse().eval().cuda()
+        extra.update(model_stats(net, torch.zeros(1, 3, *hw, device="cuda")))
+        del net
+
     out_dir = Path(args.out or ROOT / "output" / "compare" / args.name)
     dump.run(
         args.name,
@@ -95,10 +142,12 @@ if __name__ == "__main__":
         images,
         lambda p: cv2.imread(str(p), cv2.IMREAD_COLOR),
         out_dir,
-        extra={"engine": str(engine), "conf": args.conf, "imgsz": args.imgsz,
-               "retina_masks": bool(args.retina_masks) if args.task == "segment" else None,
-               "ul_speed_mean": {
-                   k: round(sum(s[k] for s in speeds[1:]) / max(len(speeds) - 1, 1), 2)
-                   for k in ("preprocess", "inference", "postprocess")
-               } if speeds else None},
+        extra=extra,
     )
+    if speeds:  # skip the first (cold) call, as dump.run does for latency
+        n = max(len(speeds) - 1, 1)
+        ul = {
+            k: round(sum(s[k] for s in speeds[1:]) / n, 2)
+            for k in ("preprocess", "inference", "postprocess")
+        }
+        print(f"ultralytics' own speed breakdown (ms): {ul}")

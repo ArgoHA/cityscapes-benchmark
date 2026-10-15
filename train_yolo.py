@@ -10,12 +10,12 @@ and letterboxing is left as-is - we compare each framework as it ships.
 """
 
 import argparse
-from pathlib import Path
 
 from ultralytics import YOLO
 
-DATA = Path("/home/argo/Desktop/Projects/cityscapes/data")
-OUT = Path("/home/argo/Desktop/Projects/cityscapes/output/models")
+from paths import DATA, OUTPUT
+
+OUT = OUTPUT / "models"
 
 # task -> (checkpoint suffix, dataset yaml)
 TASKS = {

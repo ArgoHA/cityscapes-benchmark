@@ -18,8 +18,9 @@ set -u
 cd "$(dirname "$0")"
 
 EPOCHS=${EPOCHS:-100}
-OUT=/home/argo/Desktop/Projects/cityscapes/output/models/rfdetr_seg_medium
-LOGS=/home/argo/Desktop/Projects/cityscapes/output/logs
+ROOT="${CITYSCAPES_ROOT:-$(cd .. && pwd)}"  # workspace that holds data/ and output/ (paths.py)
+LOGS="$ROOT/output/logs"
+OUT="$ROOT/output/models/rfdetr_seg_medium"
 mkdir -p "$LOGS"
 echo $$ > /tmp/rfdetr_seg.pid
 

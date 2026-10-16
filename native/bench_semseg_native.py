@@ -18,14 +18,14 @@ Backends:
   slide  SegFormer only: mmseg sliding-window torch, the reproduction gate for the paper numbers.
 
   # rivals (idle GPU):
-  uv run --project "$DFINE_SEG_ROOT" python bench_semseg_native.py \
+  uv run --project "$DFINE_SEG_ROOT" python -m native.bench_semseg_native \
       --families yolo segformer effvit mask2former --backends trt torch slide
   # add D-FINE-seg:
   ... bench_semseg_native.py --fresh 0 --families dfine yolo segformer effvit mask2former \
       --dfine D-FINE-S=<run>/model.engine D-FINE-X=<run>/model.engine
-  # then: python make_results_native.py
+  # then: python -m native.make_results_native
 
-YOLO's protocol reproduction is separate: .venv-yolo/bin/python repro_yolo_val.py
+YOLO's protocol reproduction is separate: .venv-yolo/bin/python -m native.repro_yolo_val
 """
 
 import argparse
@@ -36,8 +36,8 @@ from pathlib import Path
 import pandas as pd
 from tabulate import tabulate
 
-from paths import RIV, dfine_root
-from paths import ROOT as R
+from common.paths import RIV, dfine_root
+from common.paths import ROOT as R
 
 DFINE = dfine_root()
 DFINE_PY = ["uv", "run", "--project", str(DFINE), "python"]
@@ -104,7 +104,8 @@ def infer_cmd(m: dict, backend: str, out: Path, limit: int) -> list:
     if fam == "yolo":
         cmd = [
             RIV / ".venv-yolo/bin/python",
-            "infer_yolo.py",
+            "-m",
+            "infer.infer_yolo",
             "--weights",
             RIV / f"yolo26{s}-sem.pt",
             "--task",
@@ -120,7 +121,8 @@ def infer_cmd(m: dict, backend: str, out: Path, limit: int) -> list:
         mode = "slide" if backend == "slide" else "whole"
         cmd = [
             RIV / ".venv-segformer/bin/python",
-            "infer_segformer.py",
+            "-m",
+            "infer.infer_segformer",
             "--variant",
             s,
             "--imgsz",
@@ -133,7 +135,8 @@ def infer_cmd(m: dict, backend: str, out: Path, limit: int) -> list:
     elif fam == "effvit":
         cmd = [
             RIV / ".venv-effvit/bin/python",
-            "infer_efficientvit.py",
+            "-m",
+            "infer.infer_efficientvit",
             "--variant",
             s,
             "--imgsz",
@@ -144,7 +147,8 @@ def infer_cmd(m: dict, backend: str, out: Path, limit: int) -> list:
     elif fam == "mask2former":
         cmd = [
             RIV / ".venv-mask2former/bin/python",
-            "infer_mask2former.py",
+            "-m",
+            "infer.infer_mask2former",
             "--variant",
             s,
             "--imgsz",
@@ -153,7 +157,7 @@ def infer_cmd(m: dict, backend: str, out: Path, limit: int) -> list:
             tb,
         ]
     elif fam == "dfine":
-        cmd = DFINE_PY + ["infer_dfine.py", "--engine", m["engine"], "--task", "sem_seg"]
+        cmd = DFINE_PY + ["-m", "infer.infer_dfine", "--engine", m["engine"], "--task", "sem_seg"]
         if m.get("weights"):
             cmd += ["--weights", m["weights"]]
     return cmd + ["--name", name, "--out", out, "--limit", limit]
@@ -224,7 +228,7 @@ def run_backend(models: list[dict], backend: str, args) -> pd.DataFrame:
         blobs[m["name"]] = blob
 
     csv = OUT / f"_score_{backend}.csv"
-    sh(DFINE_PY + ["score.py", "--task", "sem_seg", "--out", csv, "--preds", *dirs])
+    sh(DFINE_PY + ["-m", "common.score", "--task", "sem_seg", "--out", csv, "--preds", *dirs])
     df = pd.read_csv(csv, index_col=0).rename(columns={"latency": "e2e_ms"})
 
     fam = {m["name"]: FAMILIES.get(m["family"], {}) for m in models}
@@ -248,7 +252,7 @@ def run_backend(models: list[dict], backend: str, args) -> pd.DataFrame:
     if backend == "trt":  # engine-only latency, same session, same loop for every engine
         engines = {m["name"]: blobs[m["name"]]["engine"] for m in models}
         ecsv = OUT / "_engine_ms.csv"
-        sh(DFINE_PY + ["measure_engine.py", "--csv", ecsv, *engines.values()])
+        sh(DFINE_PY + ["-m", "common.measure_engine", "--csv", ecsv, *engines.values()])
         e = pd.read_csv(ecsv, index_col=0)
         df["engine_ms"] = pd.Series(
             {n: float(e.loc[str(Path(p)), "engine_ms"]) for n, p in engines.items()}
@@ -318,4 +322,6 @@ if __name__ == "__main__":
         ]
         print(f"\n=== {backend} ===")
         print(tabulate(df[cols], headers="keys", tablefmt="github"))
-    print(f"\nwrote {OUT}/semseg_native_<backend>{tag}.csv  ->  python make_results_native.py")
+    print(
+        f"\nwrote {OUT}/semseg_native_<backend>{tag}.csv  ->  python -m native.make_results_native"
+    )

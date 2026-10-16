@@ -4,16 +4,16 @@ Ultralytics defaults everywhere except: dataset, epochs, output dir, seed, and b
 (auto-fit to the GPU, mirroring D-FINE's batch_size=-1). imgsz=640 is already the default,
 and letterboxing is left as-is - we compare each framework as it ships.
 
-  .venv-yolo/bin/python train_yolo.py --task detect   --size s --epochs 55
-  .venv-yolo/bin/python train_yolo.py --task segment  --size s --epochs 55
-  .venv-yolo/bin/python train_yolo.py --task semantic --size s --epochs 75
+  .venv-yolo/bin/python -m round1_640.train_yolo --task detect   --size s --epochs 55
+  .venv-yolo/bin/python -m round1_640.train_yolo --task segment  --size s --epochs 55
+  .venv-yolo/bin/python -m round1_640.train_yolo --task semantic --size s --epochs 75
 """
 
 import argparse
 
 from ultralytics import YOLO
 
-from paths import DATA, OUTPUT
+from common.paths import DATA, OUTPUT
 
 OUT = OUTPUT / "models"
 

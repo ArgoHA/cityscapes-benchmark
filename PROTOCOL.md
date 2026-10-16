@@ -6,11 +6,11 @@ ourselves — the section [Things that could still make this unfair](#9-things-t
 lists every remaining asymmetry we know about.
 
 - **Round 1** (§1–10): detection, instance and semantic segmentation at 640, D-FINE-seg vs YOLO26
-  vs RF-DETR, all trained by us. Results: [`RESULTS.md`](RESULTS.md) / [`RESULTS.csv`](RESULTS.csv).
+  vs RF-DETR, all trained by us. Results: [`RESULTS.md`](results/RESULTS.md) / [`RESULTS.csv`](results/RESULTS.csv).
 - **Native-resolution semantic segmentation** (§11, asymmetries in §9 items 10–18): D-FINE-seg
   vs the official Cityscapes checkpoints of YOLO26-sem, EfficientViT-Seg, SegFormer and
   Mask2Former at 1024×2048. Results: [`README.md`](README.md) /
-  [`RESULTS_SEMSEG_NATIVE.md`](RESULTS_SEMSEG_NATIVE.md).
+  [`RESULTS_SEMSEG_NATIVE.md`](results/RESULTS_SEMSEG_NATIVE.md).
 
 ---
 
@@ -28,9 +28,9 @@ Concretely, this means the single most important rule of this benchmark:
 
 | framework | inference path used | source |
 |---|---|---|
-| D-FINE-seg | `src/infer/trt_model.py::TRT_model` (what its own `make bench` uses) | [`infer_dfine.py`](infer_dfine.py) |
-| YOLO26 (ultralytics 8.4.92) | `YOLO(engine).predict()` → AutoBackend TensorRT + their predictor | [`infer_yolo.py`](infer_yolo.py) |
-| RF-DETR (rfdetr 1.8.3) | `rfdetr.export.benchmark.TRTInference` + their `PostProcess` + their `Normalize` transform | [`infer_rfdetr.py`](infer_rfdetr.py) |
+| D-FINE-seg | `src/infer/trt_model.py::TRT_model` (what its own `make bench` uses) | [`infer_dfine.py`](infer/infer_dfine.py) |
+| YOLO26 (ultralytics 8.4.92) | `YOLO(engine).predict()` → AutoBackend TensorRT + their predictor | [`infer_yolo.py`](infer/infer_yolo.py) |
+| RF-DETR (rfdetr 1.8.3) | `rfdetr.export.benchmark.TRTInference` + their `PostProcess` + their `Normalize` transform | [`infer_rfdetr.py`](infer/infer_rfdetr.py) |
 
 An earlier version of this harness hand-wrote TRT wrappers for the rivals. It was thrown away: a
 hand-written preprocessing path is a benchmark of *our* ability to write someone else's
@@ -91,7 +91,7 @@ framework's **default recipe**. We changed only: dataset, epoch budget, output d
 | init | `dfine_s_coco.pt` | `dfine_seg_s_coco.pt` | `dfine_seg_s_coco.pt` | `dfine_seg_m_coco.pt` |
 | AMP | bf16 | bf16 | bf16 | bf16 |
 
-### YOLO26 (ultralytics 8.4.92) — [`train_yolo.py`](train_yolo.py)
+### YOLO26 (ultralytics 8.4.92) — [`train_yolo.py`](round1_640/train_yolo.py)
 
 100 epochs, 640×640, COCO-pretrained init, **batch 10**, everything else ultralytics default
 (optimizer `auto` → AdamW, their augmentation, their letterbox, `nbs=64` accumulation).
@@ -99,7 +99,7 @@ framework's **default recipe**. We changed only: dataset, epoch budget, output d
 **Why the batch size is explicit and not `batch=-1`:** ultralytics' AutoBatch is broken on this
 GPU. It profiles with *empty* tensors, over-estimates memory ~2.4×, and under-picks by 3–4× — it
 chose batch **3** for instance segmentation on a *free* 15.5 GB card, where the real ceiling is 12
-(measured by [`probe_batch.py`](probe_batch.py), which runs actual training iterations and reads
+(measured by [`probe_batch.py`](round1_640/probe_batch.py), which runs actual training iterations and reads
 `torch.cuda.max_memory_allocated()`). Training a rival at batch 3 because its own probe
 misfired is not a "default" — it is a handicap, and 3-sample BatchNorm would have cost YOLO real
 accuracy. Measured real ceilings on this 16 GB card: detect 20, segment 12, semantic 12 → we used
@@ -107,7 +107,7 @@ accuracy. Measured real ceilings on this 16 GB card: detect 20, segment 12, sema
 
 **We then verified the batch size does not matter** (see §9, disclosure 2).
 
-### RF-DETR (rfdetr 1.8.3) — [`train_rfdetr.py`](train_rfdetr.py)
+### RF-DETR (rfdetr 1.8.3) — [`train_rfdetr.py`](round1_640/train_rfdetr.py)
 
 100-epoch budget + **rfdetr's own early stopping** (patience 15, `min_delta` 0.001 on EMA mAP —
 all their defaults), their own batch/accumulation defaults (batch 4 × grad-accum 4 = effective 16),
@@ -177,13 +177,13 @@ its own framework's exporter:
 |---|---|---|
 | D-FINE | `src/dl/export.py` | `export.half: True`, `dynamic_input: False`, `max_batch_size: 1` → `BuilderFlag.FP16` |
 | YOLO26 | ultralytics' own | `YOLO(w).export(format="engine", imgsz=640, half=True)`; `dynamic` left at their default `False` |
-| RF-DETR | rfdetr's own ONNX exporter + [`build_engine.py`](build_engine.py) | static `[1,3,576,576]` ONNX → `BuilderFlag.FP16`, 4 GB workspace |
+| RF-DETR | rfdetr's own ONNX exporter + [`build_engine.py`](common/build_engine.py) | static `[1,3,576,576]` ONNX → `BuilderFlag.FP16`, 4 GB workspace |
 
 **Why RF-DETR's engine is not built by their `trtexec` helper:** version pinning, not a defect in
 their helper. It shells out to whatever `trtexec` is on `PATH` — here the *system* TensorRT 10.11 —
 and TRT engines are version-locked, so the 10.13.3.9 runtime in the venv cannot deserialize what it
 writes. Since every engine in this benchmark is pinned to 10.13.3.9 for comparability,
-[`build_engine.py`](build_engine.py) builds through the TRT Python API at that version, replicating
+[`build_engine.py`](common/build_engine.py) builds through the TRT Python API at that version, replicating
 their exact flags (`--fp16 --memPoolSize=workspace:4096`). Build plumbing only; no model logic is
 touched. (Pin the venv's TensorRT to the system `trtexec` version instead and their helper works
 unmodified — confirmed in `rfdetr_trt.py`, which produces the same result.)
@@ -199,7 +199,7 @@ This is deliberate (§3) and is reported as a column in the results tables.
 
 This is what a user actually experiences. Protocol (identical for all three, copied from D-FINE's
 `src/dl/bench.py` so the numbers are comparable to its own published ones) — see
-[`dump.py`](dump.py):
+[`dump.py`](common/dump.py):
 
 ```python
 warm = load(images[0])
@@ -225,11 +225,11 @@ Two things sit **outside** the timed region for every framework, exactly as `ben
    clock. This matters enormously: a `[N,1024,2048]` instance-mask D2H copy costs **~13 ms** on
    Cityscapes and would swamp the number it is supposed to measure — timing it by mistake inflated
    D-FINE-S instance segmentation from 4.4 ms to 17.2 ms. Hence `infer` (timed) and `extract`
-   (untimed) are separate callables in [`dump.py`](dump.py).
+   (untimed) are separate callables in [`dump.py`](common/dump.py).
 
 ### `engine ms` — pure TensorRT execute
 
-[`measure_engine.py`](measure_engine.py): same loop, same warmup, same GPU, dummy input, no
+[`measure_engine.py`](common/measure_engine.py): same loop, same warmup, same GPU, dummy input, no
 H2D/D2H — for every engine. This isolates the architecture and is the number comparable to the
 vendors' published TensorRT figures.
 
@@ -261,7 +261,7 @@ But an optimal threshold changes *latency* too — fewer surviving boxes means l
 fewer masks to upsample to 1024×2048. Reporting F1@0.25 next to latency@0.5 would be measuring two
 different operating points, and is not a valid benchmark.
 
-So [`bench_all.py`](bench_all.py) runs **two stages** per model:
+So [`bench_all.py`](round1_640/bench_all.py) runs **two stages** per model:
 
 ```
 stage 1   infer at conf=0.05, dump predictions        <- MECHANISM ONLY, never reported
@@ -286,7 +286,7 @@ metrics at `t*` are of course full mask-based.
 
 ## 8. Scoring: one scorer for everyone
 
-[`score.py`](score.py) scores all three frameworks' dumps with **D-FINE's own
+[`score.py`](common/score.py) scores all three frameworks' dumps with **D-FINE's own
 `Validator` / `SemSegValidator`**, against ground truth built by its `BenchLoader`, at original
 2048×1024 resolution. One scorer, one GT pipeline, one metric definition.
 
@@ -433,8 +433,8 @@ These apply to the native sem-seg table and to every claim made from it.
 
 18. **Plumbing that is ours** (no model logic, no pre/postprocessing):
     - SegFormer, EfficientViT and Mask2Former ship no TensorRT runtime. Their engines run through
-      [`trt_runner.py`](trt_runner.py) (bind buffers + `execute_async_v3`), and are built from ONNX
-      by [`build_engine.py`](build_engine.py) at TensorRT 10.13.3.9 with no workspace cap, as
+      [`trt_runner.py`](common/trt_runner.py) (bind buffers + `execute_async_v3`), and are built from ONNX
+      by [`build_engine.py`](common/build_engine.py) at TensorRT 10.13.3.9 with no workspace cap, as
       ultralytics' exporter does. A 4 GB cap leaves SegFormer-B4 with no tactic for one layer.
     - SegFormer: ONNX is a TorchScript trace of `model(pixel_values).logits` (opset 17) under
       `torch.no_grad()`. The HF processor gets `size={"height": 1024, "width": 2048}`; its default
@@ -454,7 +454,7 @@ These apply to the native sem-seg table and to every claim made from it.
 A model enters the table only after its own protocol, run in PyTorch through its own code,
 reproduces the published val mIoU. YOLO26-sem's docs table equals the val mIoU stored in each
 checkpoint; ultralytics' own val reproduces it at native resolution (`imgsz=2048, rect=True` on
-8.4.92, see [`repro_yolo_val.py`](repro_yolo_val.py)). For the other families the harness runs
+8.4.92, see [`repro_yolo_val.py`](native/repro_yolo_val.py)). For the other families the harness runs
 their pre/postprocessing with the PyTorch model.
 
 | model | published val mIoU | our reproduction, their protocol | Δ | how |
@@ -529,20 +529,20 @@ used only by the `rfdetr_trt.py` cross-check in step 5:
 python prep_datasets.py
 
 # 2. train
-./run_yolo_training.sh                    # YOLO26: detect, segment, semantic
-./run_rfdetr_training.sh                  # RF-DETR: medium (detect), seg-medium (segment)
+./round1_640/run_yolo_training.sh         # YOLO26: detect, segment, semantic
+./round1_640/run_rfdetr_training.sh       # RF-DETR: medium (detect), seg-medium (segment)
 # D-FINE is trained in its own repo:  python -m src.dl.train exp_name=... task=...
 
 # 3. bench everything — accuracy AND latency at each model's own optimal operating point
-python bench_all.py --models dfine yolo rfdetr
+python -m round1_640.bench_all --models dfine yolo rfdetr
 
 # 4. regenerate RESULTS.md / RESULTS.csv from the bench CSVs (nothing hand-typed)
-python make_results.py
+python -m round1_640.make_results
 
 # 5. (independent cross-check) RF-DETR through its OWN documented TensorRT path — their trtexec
 #    helper, their TRTInference, their PostProcess. Needs the TRT-10.11 venv, matching the system
 #    trtexec binary; verifies the engine against RF-DETR's own training-time val metrics (§9.8).
-.venv-rfdetr-trtexec/bin/python rfdetr_trt.py
+.venv-rfdetr-trtexec/bin/python -m infer.rfdetr_trt
 ```
 
 `bench_all.py` orchestrates: it calls each framework's inference script **in that framework's own
@@ -554,20 +554,20 @@ idle-GPU session, and scores every dump through the single shared scorer (§8).
 | file | role |
 |---|---|
 | [`prep_datasets.py`](prep_datasets.py) | build each framework's dataset layout (symlinks, original res) |
-| [`probe_batch.py`](probe_batch.py) | measure the *real* max batch by running actual training iterations |
-| [`train_yolo.py`](train_yolo.py) / [`run_yolo_training.sh`](run_yolo_training.sh) | YOLO26 training |
-| [`run_yolo_round2.sh`](run_yolo_round2.sh) | the batch-10 detect retrain + semantic-m run behind disclosure 2 (§9) |
-| [`train_rfdetr.py`](train_rfdetr.py) / [`run_rfdetr_training.sh`](run_rfdetr_training.sh) | RF-DETR training |
-| [`dump.py`](dump.py) | shared timing protocol + prediction dump format (§6) |
-| [`infer_dfine.py`](infer_dfine.py) / [`infer_yolo.py`](infer_yolo.py) / [`infer_rfdetr.py`](infer_rfdetr.py) | run each framework's **own** shipped inference |
-| [`build_engine.py`](build_engine.py) | ONNX → TRT FP16 at the venv's TRT version (RF-DETR) |
-| [`measure_engine.py`](measure_engine.py) | pure TRT execute latency, uniform across all engines |
-| [`score.py`](score.py) | score every dump with D-FINE's `Validator`, original-res GT (§8) |
-| [`bench_all.py`](bench_all.py) | **entrypoint** — the two-stage protocol end to end |
-| [`make_results.py`](make_results.py) | generate `RESULTS.md` / `RESULTS.csv` from the bench CSVs |
+| [`probe_batch.py`](round1_640/probe_batch.py) | measure the *real* max batch by running actual training iterations |
+| [`train_yolo.py`](round1_640/train_yolo.py) / [`run_yolo_training.sh`](round1_640/run_yolo_training.sh) | YOLO26 training |
+| [`run_yolo_round2.sh`](round1_640/run_yolo_round2.sh) | the batch-10 detect retrain + semantic-m run behind disclosure 2 (§9) |
+| [`train_rfdetr.py`](round1_640/train_rfdetr.py) / [`run_rfdetr_training.sh`](round1_640/run_rfdetr_training.sh) | RF-DETR training |
+| [`dump.py`](common/dump.py) | shared timing protocol + prediction dump format (§6) |
+| [`infer_dfine.py`](infer/infer_dfine.py) / [`infer_yolo.py`](infer/infer_yolo.py) / [`infer_rfdetr.py`](infer/infer_rfdetr.py) | run each framework's **own** shipped inference |
+| [`build_engine.py`](common/build_engine.py) | ONNX → TRT FP16 at the venv's TRT version (RF-DETR) |
+| [`measure_engine.py`](common/measure_engine.py) | pure TRT execute latency, uniform across all engines |
+| [`score.py`](common/score.py) | score every dump with D-FINE's `Validator`, original-res GT (§8) |
+| [`bench_all.py`](round1_640/bench_all.py) | **entrypoint** — the two-stage protocol end to end |
+| [`make_results.py`](round1_640/make_results.py) | generate `RESULTS.md` / `RESULTS.csv` from the bench CSVs |
 
 > **Note on paths:** every script resolves the dataset and output directories through
-> [`paths.py`](paths.py): one workspace that holds this repo, `data/` and `output/`
+> [`paths.py`](common/paths.py): one workspace that holds this repo, `data/` and `output/`
 > (`CITYSCAPES_ROOT`, default: the parent of this repo), and a D-FINE-seg checkout
 > (`DFINE_SEG_ROOT`, default: `../../D-FINE-seg`).
 
@@ -582,8 +582,8 @@ an idle GPU.
 
 The second round: semantic segmentation only, at Cityscapes' native resolution, against the
 official Cityscapes checkpoints of four families. Results: [`README.md`](README.md) and the
-generated [`RESULTS_SEMSEG_NATIVE.md`](RESULTS_SEMSEG_NATIVE.md) /
-[`RESULTS_SEMSEG_NATIVE.csv`](RESULTS_SEMSEG_NATIVE.csv). Asymmetries and gates: §9, items 10–18.
+generated [`RESULTS_SEMSEG_NATIVE.md`](results/RESULTS_SEMSEG_NATIVE.md) /
+[`RESULTS_SEMSEG_NATIVE.csv`](results/RESULTS_SEMSEG_NATIVE.csv). Asymmetries and gates: §9, items 10–18.
 
 The round-1 rules carry over unchanged: each framework runs its own shipped pre- and
 postprocessing, one scorer scores everyone, and both latency columns come from one idle-GPU
@@ -595,12 +595,12 @@ best published checkpoint, which leaves no room for "you trained it badly".
 | axis | value |
 |---|---|
 | data | official Cityscapes **val**, 500 images, 19 trainIds, ignore 255. Val is the only split every rival publishes; test labels sit behind the evaluation server |
-| scoring | at the original 1024×2048, by [`score.py`](score.py) → D-FINE-seg's `SemSegValidator` (§8); mIoU (headline), pixel accuracy, per-class IoU |
+| scoring | at the original 1024×2048, by [`score.py`](common/score.py) → D-FINE-seg's `SemSegValidator` (§8); mIoU (headline), pixel accuracy, per-class IoU |
 | network input | **1024×2048 for every model**: the whole frame, one forward pass, single scale, no flip or other TTA |
 | runtime | TensorRT **10.13.3.9**, fp16, batch 1, static shape, one RTX 5070 Ti; the bench refuses to start while any other process holds the GPU |
 | pre/postprocess | each framework's own shipped code (§1), never written by us |
-| latency | **e2e**: the framework's own inference call, image decode and the result's device-to-host copy off the clock (§6, [`dump.py`](dump.py)); **engine**: TensorRT execute only, one loop for every engine ([`measure_engine.py`](measure_engine.py)) |
-| params / GMACs | recounted for every model with one counter, torch's `FlopCounterMode`, at 1024×2048 ([`model_stats.py`](model_stats.py)) |
+| latency | **e2e**: the framework's own inference call, image decode and the result's device-to-host copy off the clock (§6, [`dump.py`](common/dump.py)); **engine**: TensorRT execute only, one loop for every engine ([`measure_engine.py`](common/measure_engine.py)) |
+| params / GMACs | recounted for every model with one counter, torch's `FlopCounterMode`, at 1024×2048 ([`model_stats.py`](common/model_stats.py)) |
 
 Why one whole-frame pass for everyone:
 
@@ -608,7 +608,7 @@ Why one whole-frame pass for everyone:
   `imgsz=1024` (short side 1024, so native scale) by ultralytics 8.4.50, whose val scored at native
   resolution. The ultralytics 8.4.92 used here resizes the long side to `imgsz` in val, so
   `imgsz=1024` would score at 512×1024; `imgsz=2048, rect=True` restores the native protocol and
-  reproduces the stored numbers ([`repro_yolo_val.py`](repro_yolo_val.py)).
+  reproduces the stored numbers ([`repro_yolo_val.py`](native/repro_yolo_val.py)).
 - **EfficientViT-Seg** publishes whole-image 1024×2048 numbers measured with TensorRT fp16, batch 1:
   already this protocol.
 - **Mask2Former**'s Cityscapes test config is `MIN_SIZE_TEST 1024`, `MAX_SIZE_TEST 2048`, no TTA,
@@ -621,11 +621,11 @@ Why one whole-frame pass for everyone:
 
 | family | checkpoints | inference path (theirs) | engine |
 |---|---|---|---|
-| D-FINE-seg | N, S, M, L, X, trained here ([`train_configs/`](train_configs/README.md)) | `TRTModel`, the wrapper D-FINE-seg ships ([`infer_dfine.py`](infer_dfine.py)) | D-FINE-seg's own export, fp16, static 1024×2048 |
-| YOLO26-sem | `yolo26{n,s,m,l,x}-sem.pt`, ultralytics release assets, run with ultralytics 8.4.92 | `YOLO(engine).predict()` ([`infer_yolo.py`](infer_yolo.py)) | `YOLO(w).export(format="engine", imgsz=(1024, 2048), half=True)`; bilinear ×8 and argmax are in the graph |
-| EfficientViT-Seg | HF `han-cai/efficientvit-seg`, B0–B3, L1, L2; their repo pinned in [`setup_venvs.sh`](setup_venvs.sh) | their eval transforms (ImageNet mean/std) → engine → their bicubic `resize` to the image → argmax ([`infer_efficientvit.py`](infer_efficientvit.py)) | their `export_onnx` (opset 11 + onnxsim) → [`build_engine.py`](build_engine.py), `LiteMLA` in fp32 (§9 item 14) |
-| SegFormer | HF `nvidia/segformer-b{0..5}-finetuned-cityscapes-1024-1024`, transformers 5.19.0 | `SegformerImageProcessor` → engine → `post_process_semantic_segmentation(target_sizes=…)` ([`infer_segformer.py`](infer_segformer.py)) | TorchScript ONNX trace of the logits (opset 17) → [`build_engine.py`](build_engine.py) |
-| Mask2Former | FAIR MODEL_ZOO "Cityscapes Semantic Segmentation": R50, R101, Swin-T/S/B/L; detectron2 and Mask2Former pinned in [`setup_venvs.sh`](setup_venvs.sh) | detectron2 `DefaultPredictor` end to end (their preprocessing, `semantic_inference`, `sem_seg_postprocess`) + the argmax of their `SemSegEvaluator`; the engine stands in for `backbone` + `sem_seg_head` ([`infer_mask2former.py`](infer_mask2former.py)) | TorchScript ONNX trace of `backbone` + `sem_seg_head` → [`build_engine.py`](build_engine.py) |
+| D-FINE-seg | N, S, M, L, X, trained here ([`train_configs/`](train_configs/README.md)) | `TRTModel`, the wrapper D-FINE-seg ships ([`infer_dfine.py`](infer/infer_dfine.py)) | D-FINE-seg's own export, fp16, static 1024×2048 |
+| YOLO26-sem | `yolo26{n,s,m,l,x}-sem.pt`, ultralytics release assets, run with ultralytics 8.4.92 | `YOLO(engine).predict()` ([`infer_yolo.py`](infer/infer_yolo.py)) | `YOLO(w).export(format="engine", imgsz=(1024, 2048), half=True)`; bilinear ×8 and argmax are in the graph |
+| EfficientViT-Seg | HF `han-cai/efficientvit-seg`, B0–B3, L1, L2; their repo pinned in [`setup_venvs.sh`](setup_venvs.sh) | their eval transforms (ImageNet mean/std) → engine → their bicubic `resize` to the image → argmax ([`infer_efficientvit.py`](infer/infer_efficientvit.py)) | their `export_onnx` (opset 11 + onnxsim) → [`build_engine.py`](common/build_engine.py), `LiteMLA` in fp32 (§9 item 14) |
+| SegFormer | HF `nvidia/segformer-b{0..5}-finetuned-cityscapes-1024-1024`, transformers 5.19.0 | `SegformerImageProcessor` → engine → `post_process_semantic_segmentation(target_sizes=…)` ([`infer_segformer.py`](infer/infer_segformer.py)) | TorchScript ONNX trace of the logits (opset 17) → [`build_engine.py`](common/build_engine.py) |
+| Mask2Former | FAIR MODEL_ZOO "Cityscapes Semantic Segmentation": R50, R101, Swin-T/S/B/L; detectron2 and Mask2Former pinned in [`setup_venvs.sh`](setup_venvs.sh) | detectron2 `DefaultPredictor` end to end (their preprocessing, `semantic_inference`, `sem_seg_postprocess`) + the argmax of their `SemSegEvaluator`; the engine stands in for `backbone` + `sem_seg_head` ([`infer_mask2former.py`](infer/infer_mask2former.py)) | TorchScript ONNX trace of `backbone` + `sem_seg_head` → [`build_engine.py`](common/build_engine.py) |
 
 Each family lives in its own venv, all on torch 2.13 and TensorRT 10.13.3.9; D-FINE-seg's side
 (scorer, D-FINE-seg inference, engine timing) runs in the D-FINE-seg uv env. Not included:
@@ -651,6 +651,6 @@ A rival enters the table only after two gates (tables in §9):
 ### 11.5 Reproducing
 
 Steps, workspace layout and the script table: [`README.md`](README.md#reproduce). The entry point
-is [`bench_semseg_native.py`](bench_semseg_native.py): `--backends trt torch slide` produces the
-table, the fp16 gate and the SegFormer reproduction; [`make_results_native.py`](make_results_native.py)
+is [`bench_semseg_native.py`](native/bench_semseg_native.py): `--backends trt torch slide` produces the
+table, the fp16 gate and the SegFormer reproduction; [`make_results_native.py`](native/make_results_native.py)
 writes the results files from its CSVs, refusing any partial (`--limit`) run.

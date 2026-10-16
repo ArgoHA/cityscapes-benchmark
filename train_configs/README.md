@@ -85,7 +85,7 @@ Training ran on one RTX 5070 Ti (16 GB).
 
 ## Reproduce
 
-Workspace layout, as in the benchmark ([`../paths.py`](../paths.py)): `<root>/data/dataset_sem`,
+Workspace layout, as in the benchmark ([`common/paths.py`](../common/paths.py)): `<root>/data/dataset_sem`,
 `<root>/output/models`, with this repo at `<root>/cityscapes-benchmark`.
 
 ```bash
@@ -110,10 +110,10 @@ DFINE_SEG_CONFIG_DIR=~/dfine_cfg_l uv run dfine export train.root=<root> exp=nat
 
 # 5. bench through the harness, next to every rival (idle GPU)
 cd <root>/cityscapes-benchmark
-uv run --project "$DFINE_SEG_ROOT" python bench_semseg_native.py \
+uv run --project "$DFINE_SEG_ROOT" python -m native.bench_semseg_native \
     --families dfine yolo segformer effvit mask2former --fresh 0 \
     --dfine D-FINE-L=<root>/output/models/native_l_<date>/model.engine
-uv run --project "$DFINE_SEG_ROOT" python make_results_native.py
+uv run --project "$DFINE_SEG_ROOT" python -m native.make_results_native
 ```
 
 `exp=` in step 4 points the export at the training run's folder; the default resolves to

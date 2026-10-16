@@ -14,7 +14,7 @@
 # budget and let it stop itself once val plateaus - no wasted compute, no risk of handicapping it
 # with a short run. Best (EMA) checkpoint is saved regardless, so overshooting the peak is harmless.
 set -u
-cd "$(dirname "$0")"
+cd "$(dirname "$0")/.."  # repo root: python -m round1_640.<script>
 
 EPOCHS=${EPOCHS:-100}
 ROOT="${CITYSCAPES_ROOT:-$(cd .. && pwd)}"  # workspace that holds data/ and output/ (paths.py)
@@ -25,7 +25,7 @@ for v in medium seg-medium; do
   echo "===================================================================="
   echo "  RF-DETR $v   epochs=$EPOCHS   $(date)"
   echo "===================================================================="
-  ./.venv-rfdetr/bin/python train_rfdetr.py --variant "$v" --epochs "$EPOCHS" \
+  ./.venv-rfdetr/bin/python -m round1_640.train_rfdetr --variant "$v" --epochs "$EPOCHS" \
       2>&1 | tee "$LOGS/rfdetr_${v}.log"
   rc=${PIPESTATUS[0]}
   if [ "$rc" -ne 0 ]; then

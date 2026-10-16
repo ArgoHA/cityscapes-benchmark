@@ -7,7 +7,7 @@ loader resizes the LONG side to imgsz instead, so `imgsz=1024` would score at 51
 downsampled GT (-6 mIoU on n). `imgsz=2048, rect=True` restores the native protocol and
 reproduces the stored number (n: 0.78255 vs 0.78259).
 
-  .venv-yolo/bin/python repro_yolo_val.py [--sizes n s m l x]
+  .venv-yolo/bin/python -m native.repro_yolo_val [--sizes n s m l x]
 """
 
 import argparse
@@ -15,8 +15,9 @@ import argparse
 import torch
 from tabulate import tabulate
 from ultralytics import YOLO
+from ultralytics.utils.downloads import attempt_download_asset
 
-from paths import DATA, RIV
+from common.paths import DATA, RIV
 
 DATA_YAML = DATA / "yolo_sem.yaml"
 
@@ -28,7 +29,7 @@ if __name__ == "__main__":
 
     rows = []
     for s in args.sizes:
-        pt = RIV / f"yolo26{s}-sem.pt"
+        pt = attempt_download_asset(RIV / f"yolo26{s}-sem.pt")  # ultralytics release asset
         ck = torch.load(pt, map_location="cpu", weights_only=False)
         stored = ck["train_metrics"]["metrics/mIoU"]
         # the trainer validates the EMA in half precision with rect=True

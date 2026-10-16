@@ -11,15 +11,15 @@ engine-only TRT latency instead (measure_engine.py; see PROTOCOL.md section 4).
 RF-DETR reads the YOLO-format dataset directly ({train,valid}/{images,labels} + data.yaml) and
 rasterizes polygon labels into masks for the segmentation head.
 
-  .venv-rfdetr/bin/python train_rfdetr.py --variant small     --epochs 55
-  .venv-rfdetr/bin/python train_rfdetr.py --variant seg-small --epochs 55
+  .venv-rfdetr/bin/python -m round1_640.train_rfdetr --variant small     --epochs 55
+  .venv-rfdetr/bin/python -m round1_640.train_rfdetr --variant seg-small --epochs 55
 """
 
 import argparse
 
 import rfdetr
 
-from paths import DATA, OUTPUT
+from common.paths import DATA, OUTPUT
 
 OUT = OUTPUT / "models"
 

@@ -1,7 +1,7 @@
 """Workspace paths shared by every script. Stdlib only: it is imported from every framework's venv.
 
 $CITYSCAPES_ROOT/            default: the directory that contains this repo
-  cityscapes-benchmark/      this repo
+  cityscapes-benchmark/      this repo (RIV); results/ holds the published tables and plots
   data/                      datasets (prep_datasets.py)
   output/                    trained models, prediction dumps, bench CSVs
 $DFINE_SEG_ROOT              D-FINE-seg checkout; default: ../../D-FINE-seg from this repo
@@ -10,7 +10,8 @@ $DFINE_SEG_ROOT              D-FINE-seg checkout; default: ../../D-FINE-seg from
 import os
 from pathlib import Path
 
-RIV = Path(__file__).resolve().parent
+RIV = Path(__file__).resolve().parent.parent  # repo root: scripts run from here as `python -m`
+RESULTS = RIV / "results"
 ROOT = Path(os.environ.get("CITYSCAPES_ROOT") or RIV.parent).resolve()
 DATA = ROOT / "data"
 OUTPUT = ROOT / "output"

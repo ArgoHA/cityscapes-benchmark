@@ -19,7 +19,7 @@ architecture) and the engine runs through trt_runner.TRTRunner. Build flags as e
 --mode slide (torch only) is the reproduction gate for the paper numbers, which use mmseg's sliding
 window (1024x1024 crops, stride 768). It is never used for the benchmark table.
 
-  .venv-segformer/bin/python infer_segformer.py --variant b2 --name SegFormer-B2
+  .venv-segformer/bin/python -m infer.infer_segformer --variant b2 --name SegFormer-B2
 """
 
 import argparse
@@ -32,11 +32,11 @@ from PIL import Image
 from transformers import AutoImageProcessor, SegformerForSemanticSegmentation
 from transformers.modeling_outputs import SemanticSegmenterOutput
 
-import dump
-from build_engine import build
-from model_stats import model_stats
+from common import dump
+from common.build_engine import build
+from common.model_stats import model_stats
 
-from paths import RIV, ROOT
+from common.paths import RIV, ROOT
 
 
 class Logits(torch.nn.Module):
@@ -127,7 +127,7 @@ if __name__ == "__main__":
         extra["engine"] = str(engine_path)
         del model
         torch.cuda.empty_cache()
-        from trt_runner import TRTRunner
+        from common.trt_runner import TRTRunner
 
         runner = TRTRunner(engine_path)
 

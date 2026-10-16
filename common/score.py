@@ -5,7 +5,7 @@ D-FINE's BenchLoader exactly as src/dl/bench.py does (boxes rescaled to original
 instance masks rasterized from original-resolution polygons, sem_seg compared at original
 resolution), so the numbers are directly comparable to the existing bench_metrics.csv.
 
-  uv run --project "$DFINE_SEG_ROOT" python score.py \
+  uv run --project "$DFINE_SEG_ROOT" python -m common.score \
       --task detect --cfg <model_dir>/config.yaml \
       --preds <compare>/dfine_s_det <compare>/yolo26s_det <compare>/rfdetr_s_det
 
@@ -25,7 +25,7 @@ from omegaconf import OmegaConf
 from tabulate import tabulate
 from tqdm import tqdm
 
-from paths import OUTPUT, dfine_root
+from common.paths import OUTPUT, dfine_root
 
 DFINE = dfine_root()
 sys.path.insert(0, str(DFINE))

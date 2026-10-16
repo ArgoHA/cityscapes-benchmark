@@ -3,6 +3,11 @@
 Like-for-like benchmarks on Cityscapes. Every model runs through its own framework's shipped
 inference code and is scored by one scorer.
 
+The model under test is **[D-FINE-seg](https://github.com/ArgoHA/D-FINE-seg)**: real-time
+detection, instance and semantic segmentation, Apache-2.0 code, `pip install dfine-seg`. The
+Cityscapes weights benchmarked here are on [Hugging Face](https://huggingface.co/ArgoSA/D-FINE-seg)
+and load with `load_model("x", task="sem_seg")`.
+
 - **[Semantic segmentation at native 1024×2048](#semantic-segmentation-at-native-10242048)**:
   D-FINE-seg N–X against the official Cityscapes checkpoints of four other families.
 - **[Round 1: detection, instance and semantic segmentation at 640](#round-1-detection-instance-and-semantic-segmentation-at-640)**:
@@ -17,15 +22,15 @@ none of them retrained. Every model sees the whole 1024×2048 frame in one forwa
 scored at 1024×2048 on the 500 val images. Each runs its own framework's pre- and postprocessing.
 TensorRT 10.13.3.9 fp16, batch 1, one idle RTX 5070 Ti.
 
-![Cityscapes val mIoU vs end-to-end latency](semseg_native.png)
+![Cityscapes val mIoU vs end-to-end latency](results/semseg_native.png)
 
 End-to-end latency is what a user's pipeline pays: each framework's own preprocessing, the
 engine and its own postprocessing. On pure TensorRT engine time, YOLO26 is faster at every size
 letter:
 
-![Cityscapes val mIoU vs TensorRT engine latency](semseg_native_engine.png)
+![Cityscapes val mIoU vs TensorRT engine latency](results/semseg_native_engine.png)
 
-`plot_semseg_native.py` also draws log-axis and broken-axis versions with every model on the chart.
+[`native/plot_semseg_native.py`](native/plot_semseg_native.py) also draws log-axis and broken-axis versions with every model on the chart.
 
 | model | params (M) | GMACs | mIoU | pixel acc | engine ms | e2e ms |
 |---|---:|---:|---:|---:|---:|---:|
@@ -62,8 +67,8 @@ Cityscapes val, 500 images, mIoU and pixel accuracy in %. **engine ms** is Tenso
 only, the same loop for every engine. **e2e ms** is the framework's own inference call, with
 image decode and the device-to-host copy of the result outside the clock. GMACs are recounted
 for every model with one counter at 1024×2048. Generated tables, per-class IoU and the
-published numbers: [`RESULTS_SEMSEG_NATIVE.md`](RESULTS_SEMSEG_NATIVE.md) /
-[`RESULTS_SEMSEG_NATIVE.csv`](RESULTS_SEMSEG_NATIVE.csv).
+published numbers: [`RESULTS_SEMSEG_NATIVE.md`](results/RESULTS_SEMSEG_NATIVE.md) /
+[`RESULTS_SEMSEG_NATIVE.csv`](results/RESULTS_SEMSEG_NATIVE.csv).
 
 ### What the table shows
 
@@ -127,7 +132,8 @@ Training configs, the D-FINE-seg commit and the train/export commands for the fi
 models: **[`train_configs/`](train_configs/)**.
 
 The scripts expect one workspace directory that holds this repo, the data and the outputs, and a
-D-FINE-seg checkout (its uv env runs the scorer, D-FINE-seg inference and the engine timing):
+D-FINE-seg checkout (its uv env runs the scorer, D-FINE-seg inference and the engine timing).
+Every script runs from the repo root as a module, `python -m <folder>.<script>`:
 
 ```text
 <root>/cityscapes-benchmark/    this repo
@@ -136,7 +142,7 @@ D-FINE-seg checkout (its uv env runs the scorer, D-FINE-seg inference and the en
 ```
 
 `CITYSCAPES_ROOT` overrides `<root>` (default: the parent of this repo) and `DFINE_SEG_ROOT` points
-at the D-FINE-seg checkout (default: `../../D-FINE-seg`); see [`paths.py`](paths.py).
+at the D-FINE-seg checkout (default: `../../D-FINE-seg`); see [`paths.py`](common/paths.py).
 
 ```bash
 git clone https://github.com/ArgoHA/D-FINE-seg && (cd D-FINE-seg && uv sync)
@@ -151,20 +157,20 @@ uv run --project "$DFINE_SEG_ROOT" python prep_datasets.py --only dataset_sem yo
 ./setup_venvs.sh
 
 # 3. rivals: table + fp16 gate (torch backend) + SegFormer paper reproduction (slide backend)
-.venv-yolo/bin/python repro_yolo_val.py           # YOLO's own val must match its stored mIoU
-uv run --project "$DFINE_SEG_ROOT" python bench_semseg_native.py \
+.venv-yolo/bin/python -m native.repro_yolo_val           # YOLO's own val must match its stored mIoU
+uv run --project "$DFINE_SEG_ROOT" python -m native.bench_semseg_native \
     --families yolo segformer effvit mask2former --backends trt torch slide
 
 # 4. add D-FINE-seg (1024x2048 TensorRT engines, see train_configs/) in one TRT session
-uv run --project "$DFINE_SEG_ROOT" python bench_semseg_native.py --fresh 0 \
+uv run --project "$DFINE_SEG_ROOT" python -m native.bench_semseg_native --fresh 0 \
     --families dfine yolo segformer effvit mask2former \
     --dfine D-FINE-N=<run>/model.engine D-FINE-S=<run>/model.engine ...
 
 # 5. tables and plot (CPU only)
-uv run --project "$DFINE_SEG_ROOT" python make_results_native.py
+uv run --project "$DFINE_SEG_ROOT" python -m native.make_results_native
 for lat in e2e engine; do
-  uv run --project "$DFINE_SEG_ROOT" python plot_semseg_native.py --latency $lat --xmax 25 \
-      --pin Mask2Former-Swin-L --out semseg_native$([ $lat = engine ] && echo _engine).png
+  uv run --project "$DFINE_SEG_ROOT" python -m native.plot_semseg_native --latency $lat --xmax 25 \
+      --pin Mask2Former-Swin-L --out results/semseg_native$([ $lat = engine ] && echo _engine).png
 done
 ```
 
@@ -172,18 +178,15 @@ The bench refuses to run while another process holds the GPU, because latency wo
 `--limit 5 --allow-busy-gpu` runs a quick smoke test on the first five val images. `--fresh 0`
 reuses stored rival predictions; D-FINE-seg engines are always re-run.
 
-| file | role |
+| folder | contents |
 |---|---|
-| [`bench_semseg_native.py`](bench_semseg_native.py) | entry point: every family in its own venv, scoring, engine timing, fp16 gate |
-| `infer_{dfine,yolo,efficientvit,segformer,mask2former}.py` | each framework's own shipped inference path |
-| [`trt_runner.py`](trt_runner.py) | minimal TensorRT runner for the families that ship none (SegFormer, EfficientViT, Mask2Former) |
-| [`build_engine.py`](build_engine.py) | ONNX → TensorRT fp16 at the venv's TRT version (optional fp32 layer pin) |
-| [`measure_engine.py`](measure_engine.py) | engine-only latency, one loop for every engine |
-| [`score.py`](score.py) / [`dump.py`](dump.py) | one scorer (D-FINE-seg's `SemSegValidator`) / shared timing loop and dump format |
-| [`model_stats.py`](model_stats.py) | params and GMACs with one counter |
-| [`repro_yolo_val.py`](repro_yolo_val.py) | YOLO26-sem reproduction gate through ultralytics' own val |
-| [`make_results_native.py`](make_results_native.py) / [`plot_semseg_native.py`](plot_semseg_native.py) | results tables / mIoU-vs-latency plot |
-| [`setup_venvs.sh`](setup_venvs.sh) | venvs, pinned rival repos, Mask2Former weights |
+| [`results/`](results/) | published tables (`RESULTS_SEMSEG_NATIVE.*`, round 1 `RESULTS.*`) and plots |
+| [`native/`](native/) | native benchmark: [`bench_semseg_native.py`](native/bench_semseg_native.py) (entry point: every family in its own venv, scoring, engine timing, fp16 gate), [`repro_yolo_val.py`](native/repro_yolo_val.py) (YOLO26-sem reproduction gate through ultralytics' own val), [`make_results_native.py`](native/make_results_native.py) / [`plot_semseg_native.py`](native/plot_semseg_native.py) (tables / plot) |
+| [`infer/`](infer/) | each framework's own shipped inference path: `infer_{dfine,yolo,efficientvit,segformer,mask2former,rfdetr}.py` |
+| [`common/`](common/) | shared by both benchmarks: [`score.py`](common/score.py) (one scorer, D-FINE-seg's validators), [`dump.py`](common/dump.py) (timing loop and dump format), [`measure_engine.py`](common/measure_engine.py) (engine-only latency, one loop for every engine), [`build_engine.py`](common/build_engine.py) (ONNX → TensorRT fp16 at the venv's TRT version), [`trt_runner.py`](common/trt_runner.py) (TensorRT runner for the families that ship none), [`model_stats.py`](common/model_stats.py) (params and GMACs, one counter), [`paths.py`](common/paths.py) (workspace layout) |
+| [`round1_640/`](round1_640/) | round 1: training, bench and results scripts |
+| [`train_configs/`](train_configs/) | the five D-FINE-seg training configs |
+| [`prep_datasets.py`](prep_datasets.py) / [`setup_venvs.sh`](setup_venvs.sh) | dataset layouts / venvs, pinned rival repos, Mask2Former weights |
 
 ## Round 1: detection, instance and semantic segmentation at 640
 
@@ -194,7 +197,7 @@ benchmark above.
 
 - **[PROTOCOL.md](PROTOCOL.md)** §1–10: how every model was trained, exported, timed and scored,
   plus every asymmetry that remains.
-- **[RESULTS.md](RESULTS.md)** / **[RESULTS.csv](RESULTS.csv)**: the numbers.
+- **[RESULTS.md](results/RESULTS.md)** / **[RESULTS.csv](results/RESULTS.csv)**: the numbers.
 
 ### The rules this benchmark plays by
 
@@ -219,14 +222,14 @@ benchmark above.
 
 ```bash
 python prep_datasets.py                          # dataset layouts (symlinks, original resolution)
-./run_yolo_training.sh                           # train YOLO26
-./run_rfdetr_training.sh                         # train RF-DETR
-python bench_all.py --models dfine yolo rfdetr   # bench: accuracy + latency at the same operating point
-python make_results.py                           # regenerate RESULTS.md / RESULTS.csv
+./round1_640/run_yolo_training.sh               # train YOLO26
+./round1_640/run_rfdetr_training.sh             # train RF-DETR
+python -m round1_640.bench_all --models dfine yolo rfdetr   # bench: accuracy + latency at the same operating point
+python -m round1_640.make_results                           # regenerate RESULTS.md / RESULTS.csv
 ```
 
 Requires three isolated venvs (one per framework), each pinned to **TensorRT 10.13.3.9** so all
-engines are mutually comparable. Paths follow the workspace layout above ([`paths.py`](paths.py)).
+engines are mutually comparable. Paths follow the workspace layout above ([`paths.py`](common/paths.py)).
 
 Hardware for the published numbers: single RTX 5070 Ti (16 GB), TensorRT 10.13.3.9, FP16, batch 1,
 idle GPU.

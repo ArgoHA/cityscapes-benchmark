@@ -8,7 +8,7 @@ broken probe, and small-batch BatchNorm would cost YOLO accuracy.
 
 So: run a few REAL training iterations at each candidate batch and record peak allocated memory.
 
-  .venv-yolo/bin/python probe_batch.py --task segment --size m --batches 6 8 10 12
+  .venv-yolo/bin/python -m round1_640.probe_batch --task segment --size m --batches 6 8 10 12
 """
 
 import argparse
@@ -20,7 +20,7 @@ warnings.filterwarnings("ignore")
 import torch  # noqa: E402
 from ultralytics import YOLO  # noqa: E402
 
-from paths import DATA  # noqa: E402
+from common.paths import DATA  # noqa: E402
 
 TASKS = {
     "detect": ("", "yolo_det.yaml"),

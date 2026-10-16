@@ -1,10 +1,10 @@
 """COCO-style mIoU-vs-latency figure from RESULTS_SEMSEG_NATIVE.csv (or any bench CSV via --csv).
 
-  uv run --project ../../D-FINE-seg python plot_semseg_native.py                 # engine ms, fit all
-  uv run --project ../../D-FINE-seg python plot_semseg_native.py --latency e2e --xmax 25
-  uv run --project ../../D-FINE-seg python plot_semseg_native.py --scale broken  # 0-xmax | gap | slow
-  uv run --project ../../D-FINE-seg python plot_semseg_native.py --scale log
-  uv run --project ../../D-FINE-seg python plot_semseg_native.py --candidates    # plot_candidates/
+  uv run --project ../../D-FINE-seg python -m native.plot_semseg_native                 # engine ms, fit all
+  uv run --project ../../D-FINE-seg python -m native.plot_semseg_native --latency e2e --xmax 25
+  uv run --project ../../D-FINE-seg python -m native.plot_semseg_native --scale broken  # 0-xmax | gap | slow
+  uv run --project ../../D-FINE-seg python -m native.plot_semseg_native --scale log
+  uv run --project ../../D-FINE-seg python -m native.plot_semseg_native --candidates    # plot_candidates/
 
 Linear axis + --xmax: slower models are listed in an "off chart" note, or drawn at the right edge
 with their real values when named in --pin.
@@ -21,8 +21,9 @@ import matplotlib.pyplot as plt  # noqa: E402
 import matplotlib.ticker as ticker  # noqa: E402
 import pandas as pd  # noqa: E402
 
-RIV = Path(__file__).resolve().parent
-CSV = RIV / "RESULTS_SEMSEG_NATIVE.csv"
+from common.paths import RESULTS, RIV  # noqa: E402
+
+CSV = RESULTS / "RESULTS_SEMSEG_NATIVE.csv"
 
 # family -> (legend, color, marker, default label offset in points). D-FINE-seg orange, YOLO blue
 # (its own brand colour); the rest keep dataviz reference categorical slots 3-5.
@@ -309,5 +310,5 @@ if __name__ == "__main__":
             args.xmax,
             args.pin,
             tuple(args.broken) if args.broken else None,
-            args.out or RIV / f"semseg_native_{args.latency}{suffix}.png",
+            args.out or RESULTS / f"semseg_native_{args.latency}{suffix}.png",
         )

@@ -19,7 +19,7 @@ engine in this benchmark is pinned to cannot load what it writes. We build via t
 venv's version with their flags (fp16, 4GB workspace). Pin the venv's TRT to the system trtexec
 version instead and their helper works unmodified - see `rfdetr_trt.py`.
 
-  .venv-rfdetr/bin/python infer_rfdetr.py --variant small --weights <ckpt.pth> --name rfdetr_s_det
+  .venv-rfdetr/bin/python -m infer.infer_rfdetr --variant small --weights <ckpt.pth> --name rfdetr_s_det
 """
 
 import argparse
@@ -40,9 +40,9 @@ from rfdetr.datasets.transforms import Normalize  # noqa: E402
 from rfdetr.export.benchmark import TRTInference  # noqa: E402
 from rfdetr.models.postprocess import PostProcess  # noqa: E402
 
-import dump  # noqa: E402
-from build_engine import build  # noqa: E402
-from paths import ROOT  # noqa: E402
+from common import dump  # noqa: E402
+from common.build_engine import build  # noqa: E402
+from common.paths import ROOT  # noqa: E402
 
 VAL_CSV = ROOT / "data" / "dataset" / "val.csv"
 IMAGES = ROOT / "data" / "dataset" / "images"

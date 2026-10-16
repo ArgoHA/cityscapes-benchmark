@@ -12,7 +12,7 @@ So we report both:
 `engine ms` isolates the architecture and is the number comparable to the vendors' published
 TensorRT figures. Same loop, same warmup, same GPU for every engine.
 
-  uv run python measure_engine.py [--csv out.csv] <a.engine> <b.engine> ...
+  uv run python -m common.measure_engine [--csv out.csv] <a.engine> <b.engine> ...
 """
 
 import argparse
@@ -26,8 +26,12 @@ import torch
 from tabulate import tabulate
 
 _TRT2TORCH = {
-    trt.float32: torch.float32, trt.float16: torch.float16, trt.int32: torch.int32,
-    trt.int64: torch.int64, trt.int8: torch.int8, trt.bool: torch.bool,
+    trt.float32: torch.float32,
+    trt.float16: torch.float16,
+    trt.int32: torch.int32,
+    trt.int64: torch.int64,
+    trt.int8: torch.int8,
+    trt.bool: torch.bool,
 }
 
 

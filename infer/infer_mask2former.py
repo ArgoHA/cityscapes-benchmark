@@ -30,7 +30,7 @@ a standard fp16 build and R101's -0.39 is disclosed. All others are within 0.13.
 Repo pinned in third_party/Mask2Former + third_party/detectron2 (setup_venvs.sh). Weights:
 artifacts/mask2former/weights (MODEL_ZOO.md, Cityscapes semantic).
 
-  .venv-mask2former/bin/python infer_mask2former.py --variant swin_l --name Mask2Former-Swin-L
+  .venv-mask2former/bin/python -m infer.infer_mask2former --variant swin_l --name Mask2Former-Swin-L
 """
 
 import argparse
@@ -41,20 +41,20 @@ import cv2
 import numpy as np
 import torch
 
-RIV = Path(__file__).resolve().parent
+from common.paths import RIV, ROOT  # noqa: E402
+
 M2F = RIV / "third_party" / "Mask2Former"
-sys.path[:0] = [str(RIV), str(M2F), str(M2F / "mask2former/modeling/pixel_decoder/ops")]
+sys.path[:0] = [str(M2F), str(M2F / "mask2former/modeling/pixel_decoder/ops")]
 
 from detectron2.config import get_cfg  # noqa: E402
 from detectron2.engine import DefaultPredictor  # noqa: E402
 from detectron2.projects.deeplab import add_deeplab_config  # noqa: E402
 
-import dump  # noqa: E402
-from build_engine import build  # noqa: E402
+from common import dump  # noqa: E402
+from common.build_engine import build  # noqa: E402
 from mask2former import add_maskformer2_config  # noqa: E402
 from mask2former.modeling.pixel_decoder.ops.modules import ms_deform_attn  # noqa: E402
-from model_stats import model_stats  # noqa: E402
-from paths import ROOT  # noqa: E402
+from common.model_stats import model_stats  # noqa: E402
 
 CFG_DIR = M2F / "configs/cityscapes/semantic-segmentation"
 WEIGHTS = RIV / "artifacts" / "mask2former" / "weights"
@@ -125,7 +125,7 @@ class TRTCore(torch.nn.Module):
 
     def __init__(self, engine_path):
         super().__init__()
-        from trt_runner import TRTRunner
+        from common.trt_runner import TRTRunner
 
         self.runner = TRTRunner(engine_path)
         self.names = list(self.runner.outputs)

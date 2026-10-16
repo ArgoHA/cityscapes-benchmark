@@ -30,7 +30,7 @@
 # OOM an unattended run, same batch D-FINE's own autobatch chose for segment, and still 2-3x what
 # AutoBatch picked. Optimizer batch is unaffected either way (ultralytics accumulates to nbs=64).
 set -u
-cd "$(dirname "$0")"
+cd "$(dirname "$0")/.."  # repo root: python -m round1_640.<script>
 
 EPOCHS=${EPOCHS:-100}
 ROOT="${CITYSCAPES_ROOT:-$(cd .. && pwd)}"  # workspace that holds data/ and output/ (paths.py)
@@ -49,7 +49,7 @@ for spec in $RUNS; do
   echo "===================================================================="
   echo "  YOLO26-$size  $task   epochs=$EPOCHS  batch=$batch   $(date)"
   echo "===================================================================="
-  ./.venv-yolo/bin/python train_yolo.py \
+  ./.venv-yolo/bin/python -m round1_640.train_yolo \
       --task "$task" --size "$size" --epochs "$EPOCHS" --batch "$batch" \
       2>&1 | tee "$LOGS/yolo26${size}_${task}.log"
   rc=${PIPESTATUS[0]}

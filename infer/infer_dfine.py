@@ -4,7 +4,7 @@ Uses dfine_seg/infer/trt_model.py::TRTModel - the wrapper D-FINE ships and that 
 so D-FINE goes through the same dump/timing path as the rivals and every model is scored by the
 same code from the same artifacts.
 
-  uv run --project "$DFINE_SEG_ROOT" python infer_dfine.py \
+  uv run --project "$DFINE_SEG_ROOT" python -m infer.infer_dfine \
       --engine <model_dir>/model.engine --task detect --name dfine_s_det
 """
 
@@ -16,14 +16,13 @@ import cv2
 import numpy as np
 import torch
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-from paths import ROOT, dfine_root  # noqa: E402
+from common.paths import ROOT, dfine_root  # noqa: E402
 
 sys.path.insert(0, str(dfine_root()))
 
 from dfine_seg.infer.trt_model import TRTModel  # noqa: E402
 
-import dump  # noqa: E402
+from common import dump  # noqa: E402
 
 VAL_CSV = ROOT / "data" / "dataset" / "val.csv"
 IMAGES = ROOT / "data" / "dataset" / "images"
@@ -33,7 +32,7 @@ def stats_from_pt(pt: Path, hw: tuple[int, int]) -> dict:
     """Params/GMACs of the torch model the engine was exported from (same counter as the rivals)."""
     from dfine_seg.infer.torch_model import TorchModel
 
-    from model_stats import model_stats
+    from common.model_stats import model_stats
 
     tm = TorchModel(model_path=str(pt), input_height=hw[0], input_width=hw[1], device="cuda")
     return model_stats(tm.model.eval(), torch.zeros(1, 3, *hw, device="cuda"))

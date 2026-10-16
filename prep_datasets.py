@@ -29,7 +29,7 @@ from pathlib import Path
 
 import yaml
 
-from paths import DATA
+from common.paths import DATA
 
 THING_CLASSES = {
     0: "person",

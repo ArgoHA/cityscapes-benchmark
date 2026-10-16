@@ -30,8 +30,8 @@ runtime that loads the engine must be 10.11 too. `.venv-rfdetr` is pinned to 10.
 engine in the benchmark proper is built at) and cannot deserialize it. With the versions matched,
 their helper needs no modification.
 
-    .venv-rfdetr-trtexec/bin/python rfdetr_trt.py                # full run: 500 val images
-    .venv-rfdetr-trtexec/bin/python rfdetr_trt.py --limit 25     # smoke test
+    .venv-rfdetr-trtexec/bin/python -m infer.rfdetr_trt                # full run: 500 val images
+    .venv-rfdetr-trtexec/bin/python -m infer.rfdetr_trt --limit 25     # smoke test
 """
 
 from __future__ import annotations
@@ -65,7 +65,7 @@ from rfdetr.export.benchmark import TRTInference  # noqa: E402
 from rfdetr.utilities.box_ops import box_cxcywh_to_xyxy  # noqa: E402
 from torchmetrics.detection import MeanAveragePrecision  # noqa: E402
 
-from paths import ROOT  # noqa: E402
+from common.paths import ROOT  # noqa: E402
 
 RUN_DIR = ROOT / "output" / "models" / "rfdetr_seg_medium"
 DEVICE = "cuda:0"

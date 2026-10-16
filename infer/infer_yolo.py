@@ -7,12 +7,12 @@ original image coords). We only adapt the returned `Results` object into the dum
 Engine is produced by ultralytics' own exporter (`export(format="engine", half=True)`), which
 builds with the venv's TensorRT 10.13.3.9 - the same version D-FINE's engines use.
 
-  .venv-yolo/bin/python infer_yolo.py --weights <run>/weights/best.pt --task detect
+  .venv-yolo/bin/python -m infer.infer_yolo --weights <run>/weights/best.pt --task detect
 
 Native-res semantic (exports into --engine-dir, never next to the .pt, so an engine built at another
 resolution can't be picked up by accident):
 
-  .venv-yolo/bin/python infer_yolo.py --weights yolo26x-sem.pt --task semantic --name YOLO26-x \
+  .venv-yolo/bin/python -m infer.infer_yolo --weights yolo26x-sem.pt --task semantic --name YOLO26-x \
       --imgsz 1024 2048 --engine-dir artifacts/yolo/yolo26x-sem_1024x2048
 """
 
@@ -25,9 +25,9 @@ import numpy as np
 import torch
 from ultralytics import YOLO
 
-import dump
-from model_stats import model_stats
-from paths import ROOT
+from common import dump
+from common.model_stats import model_stats
+from common.paths import ROOT
 
 VAL_CSV = ROOT / "data" / "dataset" / "val.csv"
 IMAGES = ROOT / "data" / "dataset" / "images"

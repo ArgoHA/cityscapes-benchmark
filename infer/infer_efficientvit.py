@@ -21,7 +21,7 @@ code does; everything else (incl. the qkv/aggreg/proj convs) is fp16.
 
 Repo pinned in third_party/efficientvit (see setup_venvs.sh). Weights: HF han-cai/efficientvit-seg.
 
-  .venv-effvit/bin/python infer_efficientvit.py --variant l2 --name EfficientViT-L2
+  .venv-effvit/bin/python -m infer.infer_efficientvit --variant l2 --name EfficientViT-L2
 """
 
 import argparse
@@ -35,7 +35,7 @@ import torch
 from huggingface_hub import hf_hub_download
 from PIL import Image
 
-from paths import RIV, ROOT
+from common.paths import RIV, ROOT
 
 EVIT = RIV / "third_party" / "efficientvit"
 sys.path.insert(0, str(EVIT))
@@ -46,9 +46,9 @@ from efficientvit.seg_model_zoo import create_efficientvit_seg_model  # noqa: E4
 from eval_efficientvit_seg_model import Resize, ToTensor  # noqa: E402
 from torchvision import transforms  # noqa: E402
 
-import dump  # noqa: E402
-from build_engine import build  # noqa: E402
-from model_stats import model_stats  # noqa: E402
+from common import dump  # noqa: E402
+from common.build_engine import build  # noqa: E402
+from common.model_stats import model_stats  # noqa: E402
 
 
 # relu_linear_att ops (see module doc); the qkv/aggreg/proj convs and Concat are not matched
@@ -113,7 +113,7 @@ if __name__ == "__main__":
         extra["engine"] = str(engine_path)
         del model
         torch.cuda.empty_cache()
-        from trt_runner import TRTRunner
+        from common.trt_runner import TRTRunner
 
         runner = TRTRunner(engine_path)
 

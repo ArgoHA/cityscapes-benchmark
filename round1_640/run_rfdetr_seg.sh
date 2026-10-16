@@ -15,7 +15,7 @@
 #
 # On success we touch TRAINING_COMPLETE. The bench chain REFUSES to score a run without it.
 set -u
-cd "$(dirname "$0")"
+cd "$(dirname "$0")/.."  # repo root: python -m round1_640.<script>
 
 EPOCHS=${EPOCHS:-100}
 ROOT="${CITYSCAPES_ROOT:-$(cd .. && pwd)}"  # workspace that holds data/ and output/ (paths.py)
@@ -32,7 +32,7 @@ export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True   # the OOM itself recom
 echo "===================================================================="
 echo "  RF-DETR seg-medium  epochs=$EPOCHS  batch=2 x accum=8 (effective 16)  $(date)"
 echo "===================================================================="
-./.venv-rfdetr/bin/python train_rfdetr.py \
+./.venv-rfdetr/bin/python -m round1_640.train_rfdetr \
     --variant seg-medium --epochs "$EPOCHS" \
     --batch-size 2 --grad-accum 8 --num-workers 8 \
     2>&1 | tee "$LOGS/rfdetr_seg-medium.log"

@@ -21,7 +21,7 @@ come out of one idle-GPU run and nothing is transcribed by hand.
 Each framework runs its OWN shipped inference in its OWN venv; a single scorer (D-FINE's Validator,
 original-resolution GT) scores all of them. Run on an IDLE GPU.
 
-  uv run --project "$DFINE_SEG_ROOT" python bench_all.py [--models dfine yolo]
+  uv run --project "$DFINE_SEG_ROOT" python -m round1_640.bench_all [--models dfine yolo]
 """
 
 import argparse
@@ -32,8 +32,8 @@ from pathlib import Path
 import pandas as pd
 from tabulate import tabulate
 
-from paths import RIV, dfine_root
-from paths import ROOT as R
+from common.paths import RIV, dfine_root
+from common.paths import ROOT as R
 
 DFINE = dfine_root()
 C = R / "output" / "compare"
@@ -125,7 +125,8 @@ def infer(run: dict, task: str, conf: float, out: Path):
         sh(
             DFINE_PY
             + [
-                "infer_dfine.py",
+                "-m",
+                "infer.infer_dfine",
                 "--engine",
                 run["engine"],
                 "--task",
@@ -143,7 +144,8 @@ def infer(run: dict, task: str, conf: float, out: Path):
         sh(
             [
                 RIV / ".venv-yolo/bin/python",
-                "infer_yolo.py",
+                "-m",
+                "infer.infer_yolo",
                 "--weights",
                 M / sub / "weights" / "best.pt",
                 "--task",
@@ -161,7 +163,8 @@ def infer(run: dict, task: str, conf: float, out: Path):
         sh(
             [
                 RIV / ".venv-rfdetr/bin/python",
-                "infer_rfdetr.py",
+                "-m",
+                "infer.infer_rfdetr",
                 "--variant",
                 variant,
                 "--weights",
@@ -180,7 +183,8 @@ def score(task: str, preds: list[Path], sweep: bool, conf: float, out_csv: Path)
     cmd = (
         DFINE_PY
         + [
-            "score.py",
+            "-m",
+            "common.score",
             "--task",
             task,
             "--cfg",
@@ -208,7 +212,7 @@ def engine_latency(runs: list[dict], task: str) -> tuple[dict, dict]:
     """
     csv = C / f"engine_ms_{task}.csv"
     eng = {r["name"]: resolve_engine(r, task) for r in runs}
-    sh(DFINE_PY + ["measure_engine.py", "--csv", csv] + list(eng.values()))
+    sh(DFINE_PY + ["-m", "common.measure_engine", "--csv", csv] + list(eng.values()))
     df = pd.read_csv(csv, index_col=0)
     return (
         {n: float(df.loc[str(p), "engine_ms"]) for n, p in eng.items()},

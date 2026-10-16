@@ -25,7 +25,7 @@ import numpy as np
 import torch
 from tqdm import tqdm
 
-from paths import DATA
+from common.paths import DATA
 
 SEM_DATA = DATA / "dataset_sem"
 

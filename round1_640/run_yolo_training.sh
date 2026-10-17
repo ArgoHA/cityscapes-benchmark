@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # YOLO26 on Cityscapes: detect -> segment -> semantic, in sequence.
 #
-# Sizes are LATENCY-matched to D-FINE-S, not param-matched. Params are the wrong axis here
+# Sizes are LATENCY-matched to D-FINE-seg-S, not param-matched. Params are the wrong axis here
 # (RF-DETR is 30M+ at every size, so param parity is impossible anyway); what a user buys is
 # speed and accuracy. Engine-only TRT fp16 @640, measured on an idle GPU:
 #
-#     task      D-FINE-S   YOLO26 pick        note
+#     task      D-FINE-seg-S   YOLO26 pick        note
 #     detect      1.38     m  1.61 ms         +17% budget
 #     segment     1.91     m  2.09 ms         +9%
 #     semantic    1.52     l  1.62 ms         +7%
@@ -38,7 +38,7 @@ LOGS="$ROOT/output/logs"
 mkdir -p "$LOGS"
 echo $$ > /tmp/yolo_train.pid   # chain waiter polls this; pgrep matched a transient wrapper before
 
-# task:size:batch — sizes latency-matched to D-FINE-S, batches measured (see above).
+# task:size:batch — sizes latency-matched to D-FINE-seg-S, batches measured (see above).
 # detect is NOT re-run: yolo26m_detect already trained to convergence (best mAP50 0.606 @ ep99,
 # flat over epochs 60-100) but at AutoBatch's batch=5. Kept by decision; the batch-5-vs-19
 # asymmetry MUST be disclosed in the writeup - detect is the closest row (0.606 vs D-FINE 0.613).

@@ -7,7 +7,7 @@
 # yolo26m_detect. Real measured ceiling for detect-m on this 16 GB card is batch 20, so 10 has 2x
 # headroom - a crowded Cityscapes scene cannot OOM the run.
 #
-# semantic-m: yolo26l-sem was the latency-matched pick (1.62 ms engine vs D-FINE-S 1.52), but m is
+# semantic-m: yolo26l-sem was the latency-matched pick (1.62 ms engine vs D-FINE-seg-S 1.52), but m is
 # the closer PARAM match. Both get reported.
 set -u
 cd "$(dirname "$0")/.."  # repo root: python -m round1_640.<script>

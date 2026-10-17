@@ -38,8 +38,8 @@ FAMILIES = {
 # OFFSETS["any"]; checked by eye on every --candidates image.
 OFFSETS = {
     "any": {
-        "D-FINE-S": (8, -12),
-        "D-FINE-M": (8, -12),
+        "D-FINE-seg-S": (8, -12),
+        "D-FINE-seg-M": (8, -12),
         "SegFormer-B1": (-7, 5),
         "EfficientViT-L1": (0, 7),
         "EfficientViT-L2": (0, -16),
@@ -51,7 +51,7 @@ OFFSETS = {
         "Mask2Former-Swin-L": (-4, -15),
     },
     "engine_ms": {"YOLO26x-sem": (7, -3), "EfficientViT-L1": (0, -16)},
-    "e2e_ms": {"D-FINE-N": (-8, 4), "YOLO26n-sem": (7, -4), "SegFormer-B5": (7, -4)},
+    "e2e_ms": {"D-FINE-seg-N": (-8, 4), "YOLO26n-sem": (7, -4), "SegFormer-B5": (7, -4)},
 }
 LATENCY = {
     "engine": ("engine_ms", "TensorRT engine latency, ms"),
@@ -66,7 +66,7 @@ HALO = [pe.withStroke(linewidth=3, foreground="white")]
 def label(name: str, row) -> str:
     if row["family"] == "mask2former":
         return name.removeprefix("Mask2Former-")
-    return str(row["size"]).removeprefix("D-FINE-").upper()
+    return str(row["size"]).removeprefix("D-FINE-seg-").upper()
 
 
 def draw(ax, df: pd.DataFrame, col: str):

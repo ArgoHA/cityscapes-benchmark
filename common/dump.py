@@ -8,7 +8,7 @@ Two things sit OUTSIDE the timed region for EVERY framework, matching bench.py e
   - image decode (cv2.imread / Image.open)
   - pulling results off the GPU (`.cpu()`), which bench.py does only after stopping the clock.
     This matters: a [N,1024,2048] instance-mask D2H copy costs ~13 ms on Cityscapes and would
-    otherwise swamp the number it's supposed to measure (it inflated D-FINE-S segment from
+    otherwise swamp the number it's supposed to measure (it inflated D-FINE-seg-S segment from
     4.4 -> 17.2 ms when timed by mistake). So `infer` returns the framework's native (GPU)
     result and `extract` converts it afterwards.
 

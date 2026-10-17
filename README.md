@@ -34,11 +34,11 @@ letter:
 
 | model | params (M) | GMACs | mIoU | pixel acc | engine ms | e2e ms |
 |---|---:|---:|---:|---:|---:|---:|
-| **D-FINE-N** | 3.36 | 81.5 | 77.99 | 96.03 | 3.02 | 4.21 |
-| **D-FINE-S** | 7.99 | 213.8 | 81.12 | 96.47 | 5.38 | 6.37 |
-| **D-FINE-M** | 15.95 | 295 | 81.41 | 96.55 | 7.42 | 8.26 |
-| **D-FINE-L** | 24.97 | 380.4 | 83.80 | 96.93 | 8.98 | 9.77 |
-| **D-FINE-X** | 56.3 | 670.1 | **84.84** | **97.10** | 14.18 | 14.64 |
+| **D-FINE-seg-N** | 3.36 | 81.5 | 77.99 | 96.03 | 3.02 | 4.21 |
+| **D-FINE-seg-S** | 7.99 | 213.8 | 81.12 | 96.47 | 5.38 | 6.37 |
+| **D-FINE-seg-M** | 15.95 | 295 | 81.41 | 96.55 | 7.42 | 8.26 |
+| **D-FINE-seg-L** | 24.97 | 380.4 | 83.80 | 96.93 | 8.98 | 9.77 |
+| **D-FINE-seg-X** | 56.3 | 670.1 | **84.84** | **97.10** | 14.18 | 14.64 |
 | YOLO26n-sem | 1.63 | 11.9 | 78.25 | 95.84 | 1.26 | 4.71 |
 | YOLO26s-sem | 6.49 | 45.5 | 80.80 | 96.33 | 2.02 | 5.52 |
 | YOLO26m-sem | 14.3 | 152.7 | 82.02 | 96.47 | 4.13 | 7.54 |
@@ -72,14 +72,14 @@ published numbers: [`RESULTS_SEMSEG_NATIVE.md`](results/RESULTS_SEMSEG_NATIVE.md
 
 ### What the table shows
 
-- **D-FINE-L vs YOLO26-x** (the most accurate YOLO26-sem): +0.22 mIoU, +0.14 pixel accuracy, 13%
+- **D-FINE-seg-L vs YOLO26-x** (the most accurate YOLO26-sem): +0.22 mIoU, +0.14 pixel accuracy, 13%
   lower engine latency (8.98 vs 10.37 ms), 28% lower end-to-end latency (9.77 vs 13.58 ms), 38%
   fewer parameters. One training seed and a small margin, so read it as "matches or beats". L's
   last-epoch checkpoint is +0.04 mIoU over YOLO26-x.
-- **D-FINE-X vs Mask2Former Swin-L** (the most accurate Mask2Former): +1.51 mIoU, 4.5× lower
+- **D-FINE-seg-X vs Mask2Former Swin-L** (the most accurate Mask2Former): +1.51 mIoU, 4.5× lower
   engine latency, 6.4× lower end-to-end latency, about a quarter of the parameters. X has the
   highest mIoU and pixel accuracy of the 28 models.
-- **Cityscapes test** (held-out 1525 images, official evaluation server): D-FINE-X 83.23 vs YOLO26-x 82.10 mIoU, so the val margin holds on test.
+- **Cityscapes test** (held-out 1525 images, official evaluation server): D-FINE-seg-X 83.23 vs YOLO26-x 82.10 mIoU, so the val margin holds on test.
 - **Size by size against YOLO26-sem**, the closest rival on latency:
 
   | size | D-FINE-seg mIoU / px acc | YOLO26-sem mIoU / px acc | Δ mIoU | Δ px acc | engine ms (D-FINE / YOLO) | e2e ms (D-FINE / YOLO) | params M (D-FINE / YOLO) |
@@ -90,8 +90,8 @@ published numbers: [`RESULTS_SEMSEG_NATIVE.md`](results/RESULTS_SEMSEG_NATIVE.md
   | L | 83.80 / 96.93 | 82.95 / 96.65 | +0.85 | +0.28 | 8.98 / 5.44 | 9.77 / 8.77 | 24.97 / 17.85 |
   | X | 84.84 / 97.10 | 83.58 / 96.79 | +1.26 | +0.31 | 14.18 / 10.37 | 14.64 / 13.58 | 56.3 / 40.13 |
 
-  At equal size letter, YOLO26-sem has the lower engine latency everywhere. D-FINE-N is level
-  with YOLO26-n (−0.26 mIoU, +0.19 pixel accuracy, lower end-to-end latency). D-FINE-M sits
+  At equal size letter, YOLO26-sem has the lower engine latency everywhere. D-FINE-seg-N is level
+  with YOLO26-n (−0.26 mIoU, +0.19 pixel accuracy, lower end-to-end latency). D-FINE-seg-M sits
   below YOLO26-m.
 - **Engine vs end-to-end latency differ a lot.** Pre- and postprocessing in the shipped Python
   path can double the latency (EfficientViT-L2: 9.56 ms engine, 19.87 ms end to end). Engine ms
@@ -165,7 +165,7 @@ uv run --project "$DFINE_SEG_ROOT" python -m native.bench_semseg_native \
 # 4. add D-FINE-seg (1024x2048 TensorRT engines, see train_configs/) in one TRT session
 uv run --project "$DFINE_SEG_ROOT" python -m native.bench_semseg_native --fresh 0 \
     --families dfine yolo segformer effvit mask2former \
-    --dfine D-FINE-N=<run>/model.engine D-FINE-S=<run>/model.engine ...
+    --dfine D-FINE-seg-N=<run>/model.engine D-FINE-seg-S=<run>/model.engine ...
 
 # 5. tables and plot (CPU only)
 uv run --project "$DFINE_SEG_ROOT" python -m native.make_results_native

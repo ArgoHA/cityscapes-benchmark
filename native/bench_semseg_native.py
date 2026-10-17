@@ -22,7 +22,7 @@ Backends:
       --families yolo segformer effvit mask2former --backends trt torch slide
   # add D-FINE-seg:
   ... bench_semseg_native.py --fresh 0 --families dfine yolo segformer effvit mask2former \
-      --dfine D-FINE-S=<run>/model.engine D-FINE-X=<run>/model.engine
+      --dfine D-FINE-seg-S=<run>/model.engine D-FINE-seg-X=<run>/model.engine
   # then: python -m native.make_results_native
 
 YOLO's protocol reproduction is separate: .venv-yolo/bin/python -m native.repro_yolo_val

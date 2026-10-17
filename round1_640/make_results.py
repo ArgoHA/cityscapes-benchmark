@@ -17,15 +17,15 @@ C = OUTPUT / "compare"
 # YOLO26  : ultralytics' own "YOLO26x summary: N layers, P parameters" line in its training log
 # RF-DETR : filled in after training (same method as D-FINE — sum over the checkpoint)
 PARAMS = {
-    ("detect", "D-FINE-S"): 10.29,
+    ("detect", "D-FINE-seg-S"): 10.29,
     ("detect", "YOLO26-m"): 21.79,
     ("detect", "YOLO26-m-bs10"): 21.79,
     ("detect", "RF-DETR-medium"): 33.39,
-    ("segment", "D-FINE-S"): 11.87,
+    ("segment", "D-FINE-seg-S"): 11.87,
     ("segment", "YOLO26-m"): 26.98,
     ("segment", "RF-DETR-seg-medium"): 35.40,
-    ("sem_seg", "D-FINE-S"): 8.02,
-    ("sem_seg", "D-FINE-m"): 16.00,
+    ("sem_seg", "D-FINE-seg-S"): 8.02,
+    ("sem_seg", "D-FINE-seg-m"): 16.00,
     ("sem_seg", "YOLO26-l"): 17.87,
     ("sem_seg", "YOLO26-m"): 14.32,
 }

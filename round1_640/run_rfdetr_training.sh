@@ -3,7 +3,7 @@
 #
 # Size picked by ENGINE-ONLY latency (e2e is meaningless for sizing here - rfdetr's shipped path
 # does a PIL resize of the full 2048x1024 frame, so every variant lands at 8-16 ms e2e regardless
-# of the network). Engine-only, vs D-FINE-S:
+# of the network). Engine-only, vs D-FINE-seg-S:
 #     detect   D-FINE 1.58 | rfdetr nano .384 1.11 · small .512 1.49 · MEDIUM .576 1.62
 #     segment  D-FINE 2.09 | rfdetr seg-nano 1.44 · seg-small 1.72 · SEG-MEDIUM .432 1.95
 # medium / seg-medium are the LARGEST variants that fit D-FINE's budget => the most generous

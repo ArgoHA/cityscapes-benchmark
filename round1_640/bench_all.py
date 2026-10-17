@@ -44,13 +44,13 @@ SWEEP_CONF = 0.05  # stage-1 floor: mechanism for the sweep, never reported
 # task -> [(run dir, display name), ...]. sem_seg carries S *and* m: m is the size that actually
 # matches YOLO26-l/m on latency, and pinning the row to S was under-matching our own model.
 DF = {
-    "detect": [("det_s_2026-07-11", "D-FINE-S")],
-    "segment": [("seg_s_2026-07-11", "D-FINE-S")],
-    "sem_seg": [("sem_seg_s_2026-07-10", "D-FINE-S"), ("m_2026-07-11", "D-FINE-m")],
+    "detect": [("det_s_2026-07-11", "D-FINE-seg-S")],
+    "segment": [("seg_s_2026-07-11", "D-FINE-seg-S")],
+    "sem_seg": [("sem_seg_s_2026-07-10", "D-FINE-seg-S"), ("m_2026-07-11", "D-FINE-seg-m")],
 }
 CFG = {t: M / v[0][0] / "config.yaml" for t, v in DF.items()}  # GT source (same dataset for all)
 # task -> [(ultralytics task, size, run dir, display name), ...]
-#   sem_seg  : TWO rows. l is the latency-match to D-FINE-S (1.62 vs 1.52 ms engine), m the
+#   sem_seg  : TWO rows. l is the latency-match to D-FINE-seg-S (1.62 vs 1.52 ms engine), m the
 #              closer param-match (14.3 M vs 8.0 M; l is 17.9 M). Report both.
 #   detect   : TWO rows, batch 5 vs batch 10. Batch 5 was AutoBatch's (broken) pick; we retrained
 #              at 10 to remove the "unfairly small batch" caveat and it came out WORSE on

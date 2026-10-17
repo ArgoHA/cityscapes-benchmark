@@ -148,7 +148,7 @@ every size, so parameter parity is impossible anyway.
 So each rival is the **smallest variant whose engine-only latency is at least D-FINE's**. The rival
 is therefore never under-resourced — it gets *more* compute budget than us, and 2–3× the params:
 
-| task | D-FINE-S engine | rival pick | rival engine |
+| task | D-FINE-seg-S engine | rival pick | rival engine |
 |---|---|---|---|
 | detect | 1.38 ms | YOLO26-**m** | 1.61 ms (+17%) |
 | segment | 1.91 ms | YOLO26-**m**-seg | 2.09 ms (+9%) |
@@ -162,8 +162,8 @@ param-matched reference point, not as the headline rival.)
 If D-FINE still wins accuracy against a rival carrying more params *and* a bigger engine budget,
 the result is strong.
 
-For semantic segmentation we additionally report **D-FINE-m** (16.0 M), which is the size that
-actually matches YOLO26-l/m on latency — reporting only D-FINE-S there was under-matching our own
+For semantic segmentation we additionally report **D-FINE-seg-m** (16.0 M), which is the size that
+actually matches YOLO26-l/m on latency — reporting only D-FINE-seg-S there was under-matching our own
 model, and we say so rather than quietly keeping the flattering row.
 
 ---
@@ -224,7 +224,7 @@ Two things sit **outside** the timed region for every framework, exactly as `ben
 2. **Pulling results off the GPU** (`.cpu()`), which `bench.py` performs only after stopping the
    clock. This matters enormously: a `[N,1024,2048]` instance-mask D2H copy costs **~13 ms** on
    Cityscapes and would swamp the number it is supposed to measure — timing it by mistake inflated
-   D-FINE-S instance segmentation from 4.4 ms to 17.2 ms. Hence `infer` (timed) and `extract`
+   D-FINE-seg-S instance segmentation from 4.4 ms to 17.2 ms. Hence `infer` (timed) and `extract`
    (untimed) are separate callables in [`dump.py`](common/dump.py).
 
 ### `engine ms` — pure TensorRT execute
@@ -396,7 +396,7 @@ These apply to the native sem-seg table and to every claim made from it.
     images the table reports; YOLO26-sem's `best.pt` has the same bias, SegFormer reports its final
     iteration. The last-epoch val mIoU of every D-FINE-seg size is in the README and in
     [`train_configs/README.md`](train_configs/README.md). It is 0.23 (X) to 0.93 (M) below the best
-    epoch. D-FINE-L's last epoch is still +0.04 over YOLO26-x. One seed per size.
+    epoch. D-FINE-seg-L's last epoch is still +0.04 over YOLO26-x. One seed per size.
 
 12. **Training budgets differ, in the rivals' favour.** D-FINE-seg: 62–75 epochs at full
     1024×2048, batch 2–5. YOLO26-sem: 220–240 epochs (`train_args` in the checkpoints).

@@ -9,7 +9,7 @@ Machine-readable copy: [`RESULTS.csv`](RESULTS.csv). Full protocol + every known
 
 | model | params (M) | input | conf | **F1** | precision | recall | IoU | e2e ms | engine ms |
 |---|---|---|---|---|---|---|---|---|---|
-| **D-FINE-S** | 10.29 | 640x640 | 0.5 | **0.703** | 0.817 | 0.617 | 0.446 | **2** | **1.38** |
+| **D-FINE-seg-S** | 10.29 | 640x640 | 0.5 | **0.703** | 0.817 | 0.617 | 0.446 | **2** | **1.38** |
 | YOLO26-m | 21.79 | 640x640 | 0.25 | 0.691 | 0.792 | 0.613 | 0.432 | 3.03 | 1.59 |
 | YOLO26-m-bs10 | 21.79 | 640x640 | 0.25 | 0.689 | 0.776 | 0.619 | 0.428 | 3 | 1.57 |
 | RF-DETR-medium | 33.39 | 576x576 | 0.35 | 0.673 | 0.769 | 0.599 | 0.409 | 10.2 | 1.45 |
@@ -18,7 +18,7 @@ Machine-readable copy: [`RESULTS.csv`](RESULTS.csv). Full protocol + every known
 
 | model | params (M) | input | conf | **F1** | precision | recall | IoU | e2e ms | engine ms |
 |---|---|---|---|---|---|---|---|---|---|
-| **D-FINE-S** | 11.87 | 640x640 | 0.5 | **0.661** | 0.748 | 0.592 | 0.375 | **3.09** | 1.9 |
+| **D-FINE-seg-S** | 11.87 | 640x640 | 0.5 | **0.661** | 0.748 | 0.592 | 0.375 | **3.09** | 1.9 |
 | YOLO26-m | 26.98 | 640x640 | 0.25 | 0.599 | 0.688 | 0.53 | 0.312 | 5.32 | 2.05 |
 | RF-DETR-seg-medium | 35.4 | 432x432 | 0.35 | 0.62 | 0.789 | 0.51 | 0.346 | 16.81 | **1.77** |
 
@@ -26,8 +26,8 @@ Machine-readable copy: [`RESULTS.csv`](RESULTS.csv). Full protocol + every known
 
 | model | params (M) | input | **mIoU** | pixel acc | e2e ms | engine ms |
 |---|---|---|---|---|---|---|
-| D-FINE-S | 8.02 | 640x640 | 0.728 | 0.95 | **1.79** | 1.5 |
-| **D-FINE-m** | 16 | 640x640 | **0.753** | 0.954 | 2.24 | 2.06 |
+| D-FINE-seg-S | 8.02 | 640x640 | 0.728 | 0.95 | **1.79** | 1.5 |
+| **D-FINE-seg-m** | 16 | 640x640 | **0.753** | 0.954 | 2.24 | 2.06 |
 | YOLO26-l | 17.87 | 640x640 | 0.739 | 0.949 | 3.56 | 1.63 |
 | YOLO26-m | 14.32 | 640x640 | 0.733 | 0.947 | 3.08 | **1.16** |
 

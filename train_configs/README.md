@@ -112,7 +112,7 @@ DFINE_SEG_CONFIG_DIR=~/dfine_cfg_l uv run dfine export train.root=<root> exp=nat
 cd <root>/cityscapes-benchmark
 uv run --project "$DFINE_SEG_ROOT" python -m native.bench_semseg_native \
     --families dfine yolo segformer effvit mask2former --fresh 0 \
-    --dfine D-FINE-L=<root>/output/models/native_l_<date>/model.engine
+    --dfine D-FINE-seg-L=<root>/output/models/native_l_<date>/model.engine
 uv run --project "$DFINE_SEG_ROOT" python -m native.make_results_native
 ```
 

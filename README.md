@@ -79,6 +79,7 @@ published numbers: [`RESULTS_SEMSEG_NATIVE.md`](results/RESULTS_SEMSEG_NATIVE.md
 - **D-FINE-X vs Mask2Former Swin-L** (the most accurate Mask2Former): +1.51 mIoU, 4.5× lower
   engine latency, 6.4× lower end-to-end latency, about a quarter of the parameters. X has the
   highest mIoU and pixel accuracy of the 28 models.
+- **Cityscapes test** (held-out 1525 images, official evaluation server): D-FINE-X 83.23 vs YOLO26-x 82.10 mIoU, so the val margin holds on test.
 - **Size by size against YOLO26-sem**, the closest rival on latency:
 
   | size | D-FINE-seg mIoU / px acc | YOLO26-sem mIoU / px acc | Δ mIoU | Δ px acc | engine ms (D-FINE / YOLO) | e2e ms (D-FINE / YOLO) | params M (D-FINE / YOLO) |

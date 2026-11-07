@@ -4,8 +4,8 @@ Like-for-like benchmarks on Cityscapes. Every model runs through its own framewo
 inference code and is scored by one scorer.
 
 The model under test is **[D-FINE-seg](https://github.com/ArgoHA/D-FINE-seg)**: real-time
-detection, instance and semantic segmentation and keypoint estimation, Apache-2.0 code,
-`pip install dfine-seg`, live demos at [dfine-seg.argoai.space](https://dfine-seg.argoai.space). The
+detection, keypoint estimation, instance and semantic segmentation, Apache-2.0 code,
+`pip install dfine-seg`, demos at [dfine-seg.argoai.space](https://dfine-seg.argoai.space). The
 Cityscapes weights benchmarked here are on [Hugging Face](https://huggingface.co/ArgoSA/D-FINE-seg)
 and load with `load_model("x", task="sem_seg")`.
 
